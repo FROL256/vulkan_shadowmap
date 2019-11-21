@@ -175,7 +175,7 @@ private:
     CreateVertexBuffer(device, physicalDevice, 6 * sizeof(float),
                        &m_vbo, &m_vboMem);
 
-    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, m_vbo,
+    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout, m_vbo,
                                  &commandBuffers);
 
     CreateSyncObjects(device, &m_sync);
@@ -392,10 +392,17 @@ private:
     colorBlending.blendConstants[2] = 0.0f;
     colorBlending.blendConstants[3] = 0.0f;
 
+    VkPushConstantRange pcRange = {};   
+    pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    pcRange.offset     = 0;
+    pcRange.size       = 16*2*sizeof(float);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount         = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
 
     if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
@@ -424,7 +431,7 @@ private:
 
 
   static void CreateAndWriteCommandBuffers(VkDevice a_device, VkCommandPool a_cmdPool, std::vector<VkFramebuffer> a_swapChainFramebuffers, VkExtent2D a_frameBufferExtent,
-                                           VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkBuffer a_vPosBuffer,
+                                           VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout, VkBuffer a_vPosBuffer,
                                            std::vector<VkCommandBuffer>* a_cmdBuffers) 
   {
     std::vector<VkCommandBuffer>& commandBuffers = (*a_cmdBuffers);
@@ -462,6 +469,18 @@ private:
       vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
       vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
+
+      float matricesData[32] = {1,0,0,0,
+                                0,1,0,0,
+                                0,0,1,0,
+                                +0.25,-0.25,0,1,
+                                
+                                1,0,0,0,
+                                0,1,0,0,
+                                0,0,1,0,
+                                0,0,0,1};
+
+      vkCmdPushConstants(commandBuffers[i], a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matricesData);
 
       // say we want to take vertices pos from a_vPosBuffer
       {
