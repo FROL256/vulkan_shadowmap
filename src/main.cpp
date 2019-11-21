@@ -43,7 +43,7 @@ struct g_input_t
   bool capturedMouseJustNow = false;
   float lastX,lastY, scrollY;
   float camMoveSpeed     = 1.0f;
-  float mouseSensitivity = 1.0f;
+  float mouseSensitivity = 0.1f;
 
 } g_input;
 
@@ -55,6 +55,10 @@ void OnKeyboardPressed(GLFWwindow* window, int key, int scancode, int action, in
 		if (action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GL_TRUE);
 		break;
+  case GLFW_KEY_LEFT_SHIFT:
+    g_input.camMoveSpeed = 10.0f;
+  break;
+
 	case GLFW_KEY_SPACE: 
 		break;
   case GLFW_KEY_1:
@@ -101,14 +105,11 @@ void OnMouseMove(GLFWwindow* window, double xpos, double ypos)
   
   g_input.lastX = float(xpos);
   g_input.lastY = float(ypos);
-  
-  //if (g_input.captureMouse)
-    //camera.ProcessMouseMove(xoffset, yoffset);
 }
 
 void OnMouseScroll(GLFWwindow* window, double xoffset, double yoffset)
 {
-  //camera.ProcessMouseScroll(GLfloat(yoffset));
+  g_input.scrollY = float(yoffset);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,6 +225,7 @@ private:
     if(fieldOfView < 1.0f) fieldOfView   = 1.0f;
     if(fieldOfView > 180.0f) fieldOfView = 180.0f;
     a_cam.fov       = fieldOfView;
+
     g_input.scrollY = 0.0f;
   }
 
@@ -598,15 +600,14 @@ private:
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
 
-      float matricesData[32] = {1,0,0,0,
-                                0,1,0,0,
-                                0,0,1,0,
-                                -m_cam.pos.x, -m_cam.pos.y, 0, 1,
-                                
-                                1,0,0,0,
-                                0,1,0,0,
-                                0,0,1,0,
-                                0,0,0,1};
+      float matricesData[32];
+      
+      const float aspect            = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height);
+      LiteMath::float4x4 mWorldView = LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
+      LiteMath::float4x4 mProj      = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
+
+      memcpy(matricesData + 0,  mWorldView.L(), 16*sizeof(float));
+      memcpy(matricesData + 16, mProj.L(),      16*sizeof(float));
 
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matricesData);
 
