@@ -24,7 +24,7 @@
 const int WIDTH  = 800;
 const int HEIGHT = 600;
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int MAX_FRAMES_IN_FLIGHT = 1;
 
 const std::vector<const char*> deviceExtensions = {
   VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -764,14 +764,23 @@ private:
 
   void DrawFrame() 
   {
+    vkWaitForFences(device, 1, &m_sync.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences  (device, 1, &m_sync.inFlightFences[currentFrame]);
+
     uint32_t imageIndex;
     vkAcquireNextImageKHR(device, screen.swapChain, UINT64_MAX, m_sync.imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    
+    // update next used command buffer
+    //
+    {
+      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[imageIndex], screen.swapChainExtent, graphicsPipeline, pipelineLayout, m_vbo, 
+                         commandBuffers[imageIndex]);
+    }
 
     VkSemaphore      waitSemaphores[] = { m_sync.imageAvailableSemaphores[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
-
-    VkSubmitInfo submitInfo = {};
+   
+    VkSubmitInfo submitInfo       = {};
     submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores    = waitSemaphores;
@@ -784,7 +793,6 @@ private:
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores    = signalSemaphores;
 
-    vkResetFences(device, 1, &m_sync.inFlightFences[currentFrame]); 
     if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_sync.inFlightFences[currentFrame]) != VK_SUCCESS)
       throw std::runtime_error("[DrawFrame]: failed to submit draw command buffer!");
 
@@ -800,15 +808,6 @@ private:
     presentInfo.pImageIndices   = &imageIndex;
 
     vkQueuePresentKHR(presentQueue, &presentInfo);
-    vkWaitForFences(device, 1, &m_sync.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-    
-    // update camera and other
-    //
-    for(int i=0;i<commandBuffers.size();i++)
-    {
-      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[i], screen.swapChainExtent, graphicsPipeline, pipelineLayout, m_vbo, 
-                         commandBuffers[i]);
-    }
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
