@@ -549,5 +549,3 @@ void vk_utils::CreateScreenFrameBuffers(VkDevice a_device, VkRenderPass a_render
       throw std::runtime_error("failed to create framebuffer!");
   }
 }
-
-

@@ -18,6 +18,7 @@
 #include <cassert>
 
 #include "vk_utils.h"
+#include "vk_geom.h"
 
 #include "Camera.h"
 
@@ -184,6 +185,7 @@ private:
     glfwSetMouseButtonCallback(window, OnMouseButtonClicked);
 	  glfwSetScrollCallback     (window, OnMouseScroll);
 	  //glfwSetInputMode          (window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // capture cursor at start
+    glfwSwapInterval(0);
   }
 
   void UpdateCamera(Camera& a_cam, float secondsElapsed)
@@ -351,7 +353,7 @@ private:
       //
       avgTime += diffTime;
       avgCounter++;
-      if(avgCounter == NAverage)
+      if(avgCounter >= NAverage)
       {
         std::stringstream strout;
         strout << "FPS = " << int( 1.0/(avgTime/double(NAverage)) );
