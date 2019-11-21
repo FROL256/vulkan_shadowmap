@@ -332,6 +332,10 @@ private:
 
   void MainLoop()
   {
+    constexpr int NAverage = 30;
+    double avgTime = 0.0;
+    int avgCounter = 0;
+
     double lastTime = glfwGetTime();
     while (!glfwWindowShouldClose(window)) 
     {
@@ -342,6 +346,20 @@ private:
       UpdateCamera(m_cam, diffTime);
       glfwPollEvents();
       DrawFrame();
+
+      // count and print FPS
+      //
+      avgTime += diffTime;
+      avgCounter++;
+      if(avgCounter == NAverage)
+      {
+        std::stringstream strout;
+        strout << "FPS = " << int( 1000.0/(avgTime/double(NAverage)) );
+        glfwSetWindowTitle(window, strout.str().c_str());
+        avgTime    = 0.0;
+        avgCounter = 0;
+      }
+      
     }
 
     vkDeviceWaitIdle(device);
@@ -600,16 +618,11 @@ private:
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
 
-      float matricesData[32];
-      
-      const float aspect            = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height);
-      LiteMath::float4x4 mWorldView = LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
-      LiteMath::float4x4 mProj      = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
-
-      memcpy(matricesData + 0,  mWorldView.L(), 16*sizeof(float));
-      memcpy(matricesData + 16, mProj.L(),      16*sizeof(float));
-
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matricesData);
+      LiteMath::float4x4 matrices[2];
+      const float aspect = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height);
+      matrices[0]        = LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
+      matrices[1]        = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
 
       // say we want to take vertices pos from a_vPosBuffer
       {
