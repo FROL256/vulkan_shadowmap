@@ -332,7 +332,7 @@ private:
 
   void MainLoop()
   {
-    constexpr int NAverage = 30;
+    constexpr int NAverage = 60;
     double avgTime = 0.0;
     int avgCounter = 0;
 
@@ -354,7 +354,7 @@ private:
       if(avgCounter == NAverage)
       {
         std::stringstream strout;
-        strout << "FPS = " << int( 1000.0/(avgTime/double(NAverage)) );
+        strout << "FPS = " << int( 1.0/(avgTime/double(NAverage)) );
         glfwSetWindowTitle(window, strout.str().c_str());
         avgTime    = 0.0;
         avgCounter = 0;
