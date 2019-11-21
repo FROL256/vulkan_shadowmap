@@ -19,6 +19,8 @@
 
 #include "vk_utils.h"
 
+#include "Camera.h"
+
 const int WIDTH  = 800;
 const int HEIGHT = 600;
 
@@ -33,6 +35,86 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+struct g_input_t
+{
+  bool firstMouse   = true;
+  bool captureMouse = false;
+  bool capturedMouseJustNow = false;
+  float lastX,lastY, scrollY;
+  float camMoveSpeed     = 1.0f;
+  float mouseSensitivity = 1.0f;
+
+} g_input;
+
+void OnKeyboardPressed(GLFWwindow* window, int key, int scancode, int action, int mode)
+{
+	switch (key)
+	{
+	case GLFW_KEY_ESCAPE: 
+		if (action == GLFW_PRESS)
+			glfwSetWindowShouldClose(window, GL_TRUE);
+		break;
+	case GLFW_KEY_SPACE: 
+		break;
+  case GLFW_KEY_1:
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    break;
+  case GLFW_KEY_2:
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    break;
+	default:
+		//if (action == GLFW_PRESS)
+		//	keys[key] = true;
+		//else if (action == GLFW_RELEASE)
+		//	keys[key] = false;
+    break;  
+	}
+}
+
+void OnMouseButtonClicked(GLFWwindow* window, int button, int action, int mods)
+{
+  if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+    g_input.captureMouse = !g_input.captureMouse;
+  
+  if (g_input.captureMouse)
+  {
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    g_input.capturedMouseJustNow = true;
+  }
+  else
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+}
+
+void OnMouseMove(GLFWwindow* window, double xpos, double ypos)
+{
+  if (g_input.firstMouse)
+  {
+    g_input.lastX      = float(xpos);
+    g_input.lastY      = float(ypos);
+    g_input.firstMouse = false;
+  }
+
+  float xoffset = float(xpos) - g_input.lastX;
+  float yoffset = g_input.lastY - float(ypos);  
+  
+  g_input.lastX = float(xpos);
+  g_input.lastY = float(ypos);
+  
+  //if (g_input.captureMouse)
+    //camera.ProcessMouseMove(xoffset, yoffset);
+}
+
+void OnMouseScroll(GLFWwindow* window, double xoffset, double yoffset)
+{
+  //camera.ProcessMouseScroll(GLfloat(yoffset));
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class HelloTriangleApplication 
 {
@@ -85,6 +167,7 @@ private:
   } m_sync;
 
   size_t currentFrame = 0;
+  Camera m_cam;
 
   void InitWindow() 
   {
@@ -94,7 +177,56 @@ private:
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+
+    glfwSetKeyCallback        (window, OnKeyboardPressed);  
+	  glfwSetCursorPosCallback  (window, OnMouseMove); 
+    glfwSetMouseButtonCallback(window, OnMouseButtonClicked);
+	  glfwSetScrollCallback     (window, OnMouseScroll);
+	  //glfwSetInputMode          (window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // capture cursor at start
   }
+
+  void UpdateCamera(Camera& a_cam, float secondsElapsed)
+  {
+    //move position of camera based on WASD keys, and XZ keys for up and down
+    if (glfwGetKey(window, 'S'))
+      a_cam.offsetPosition(secondsElapsed * g_input.camMoveSpeed * -a_cam.forward());
+    else if (glfwGetKey(window, 'W'))
+      a_cam.offsetPosition(secondsElapsed * g_input.camMoveSpeed * a_cam.forward());
+    
+    if (glfwGetKey(window, 'A'))
+      a_cam.offsetPosition(secondsElapsed * g_input.camMoveSpeed * -a_cam.right());
+    else if (glfwGetKey(window, 'D'))
+      a_cam.offsetPosition(secondsElapsed * g_input.camMoveSpeed * a_cam.right());
+    
+    if (glfwGetKey(window, 'F'))
+      a_cam.offsetPosition(secondsElapsed * g_input.camMoveSpeed * -a_cam.up);
+    else if (glfwGetKey(window, 'R'))
+      a_cam.offsetPosition(secondsElapsed * g_input.camMoveSpeed * a_cam.up);
+    
+    //rotate camera based on mouse movement
+    //
+    if (g_input.captureMouse)
+    {
+      if(g_input.capturedMouseJustNow)
+        glfwSetCursorPos(window, 0, 0);
+    
+      double mouseX, mouseY;
+      glfwGetCursorPos(window, &mouseX, &mouseY);
+      a_cam.offsetOrientation(g_input.mouseSensitivity * float(mouseY), g_input.mouseSensitivity * float(mouseX));
+      glfwSetCursorPos(window, 0, 0); //reset the mouse, so it doesn't go out of the window
+      g_input.capturedMouseJustNow = false;
+    }
+    
+    //increase or decrease field of view based on mouse wheel
+    //
+    const float zoomSensitivity = -0.2f;
+    float fieldOfView = a_cam.fov + zoomSensitivity * (float)g_input.scrollY;
+    if(fieldOfView < 1.0f) fieldOfView   = 1.0f;
+    if(fieldOfView > 180.0f) fieldOfView = 180.0f;
+    a_cam.fov       = fieldOfView;
+    g_input.scrollY = 0.0f;
+  }
+
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL debugReportCallbackFn(
     VkDebugReportFlagsEXT                       flags,
@@ -147,6 +279,7 @@ private:
     {
       VkCommandPoolCreateInfo poolInfo = {};
       poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+      poolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
       poolInfo.queueFamilyIndex = vk_utils::GetQueueFamilyIndex(physicalDevice, VK_QUEUE_GRAPHICS_BIT);
 
       if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
@@ -197,8 +330,14 @@ private:
 
   void MainLoop()
   {
+    double lastTime = glfwGetTime();
     while (!glfwWindowShouldClose(window)) 
     {
+      double thisTime = glfwGetTime();
+      float diffTime  = float(thisTime - lastTime);
+      lastTime        = thisTime;
+ 
+      UpdateCamera(m_cam, diffTime);
       glfwPollEvents();
       DrawFrame();
     }
@@ -429,10 +568,68 @@ private:
     vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
   }
 
+  void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo,  VkExtent2D a_frameBufferExtent, 
+                          VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout, VkBuffer a_vPosBuffer,
+                          VkCommandBuffer& a_cmdBuff)
+  {
+    vkResetCommandBuffer(a_cmdBuff, 0);
 
-  static void CreateAndWriteCommandBuffers(VkDevice a_device, VkCommandPool a_cmdPool, std::vector<VkFramebuffer> a_swapChainFramebuffers, VkExtent2D a_frameBufferExtent,
-                                           VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout, VkBuffer a_vPosBuffer,
-                                           std::vector<VkCommandBuffer>* a_cmdBuffers) 
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    //beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+    if (vkBeginCommandBuffer(a_cmdBuff, &beginInfo) != VK_SUCCESS) 
+      throw std::runtime_error("[WriteCommandBuffer]: failed to begin recording command buffer!");
+    
+    ///// 
+    {
+      VkRenderPassBeginInfo renderPassInfo = {};
+      renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+      renderPassInfo.renderPass        = a_renderPass;
+      renderPassInfo.framebuffer       = a_fbo;
+      renderPassInfo.renderArea.offset = { 0, 0 };
+      renderPassInfo.renderArea.extent = a_frameBufferExtent;
+
+      VkClearValue clearColor        = { 0.0f, 0.0f, 0.0f, 1.0f };
+      renderPassInfo.clearValueCount = 1;
+      renderPassInfo.pClearValues    = &clearColor;
+
+      vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
+
+      float matricesData[32] = {1,0,0,0,
+                                0,1,0,0,
+                                0,0,1,0,
+                                -m_cam.pos.x, -m_cam.pos.y, 0, 1,
+                                
+                                1,0,0,0,
+                                0,1,0,0,
+                                0,0,1,0,
+                                0,0,0,1};
+
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matricesData);
+
+      // say we want to take vertices pos from a_vPosBuffer
+      {
+        VkBuffer vertexBuffers[] = { a_vPosBuffer };
+        VkDeviceSize offsets[]   = { 0 };
+        vkCmdBindVertexBuffers(a_cmdBuff, 0, 1, vertexBuffers, offsets);
+      }
+
+      vkCmdDraw(a_cmdBuff, 3, 1, 0, 0);
+
+      vkCmdEndRenderPass(a_cmdBuff);
+    }
+  
+    if (vkEndCommandBuffer(a_cmdBuff) != VK_SUCCESS)
+      throw std::runtime_error("failed to record command buffer!");  
+  }
+
+
+  void CreateAndWriteCommandBuffers(VkDevice a_device, VkCommandPool a_cmdPool, std::vector<VkFramebuffer> a_swapChainFramebuffers, VkExtent2D a_frameBufferExtent,
+                                    VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout, VkBuffer a_vPosBuffer,
+                                    std::vector<VkCommandBuffer>* a_cmdBuffers) 
   {
     std::vector<VkCommandBuffer>& commandBuffers = (*a_cmdBuffers);
 
@@ -449,53 +646,8 @@ private:
 
     for (size_t i = 0; i < commandBuffers.size(); i++) 
     {
-      VkCommandBufferBeginInfo beginInfo = {};
-      beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-      if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) 
-        throw std::runtime_error("[CreateCommandPoolAndBuffers]: failed to begin recording command buffer!");
-
-      VkRenderPassBeginInfo renderPassInfo = {};
-      renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-      renderPassInfo.renderPass        = a_renderPass;
-      renderPassInfo.framebuffer       = a_swapChainFramebuffers[i];
-      renderPassInfo.renderArea.offset = { 0, 0 };
-      renderPassInfo.renderArea.extent = a_frameBufferExtent;
-
-      VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-      renderPassInfo.clearValueCount = 1;
-      renderPassInfo.pClearValues = &clearColor;
-
-      vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-      vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
-
-      float matricesData[32] = {1,0,0,0,
-                                0,1,0,0,
-                                0,0,1,0,
-                                +0.25,-0.25,0,1,
-                                
-                                1,0,0,0,
-                                0,1,0,0,
-                                0,0,1,0,
-                                0,0,0,1};
-
-      vkCmdPushConstants(commandBuffers[i], a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matricesData);
-
-      // say we want to take vertices pos from a_vPosBuffer
-      {
-        VkBuffer vertexBuffers[] = { a_vPosBuffer };
-        VkDeviceSize offsets[]   = { 0 };
-        vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-      }
-
-      vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
-
-      vkCmdEndRenderPass(commandBuffers[i]);
-
-      if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-        throw std::runtime_error("failed to record command buffer!");
-      }
+      WriteCommandBuffer(a_renderPass, a_swapChainFramebuffers[i], a_frameBufferExtent, a_graphicsPipeline, a_layout, a_vPosBuffer, 
+                         commandBuffers[i]);
     }
   }
 
@@ -611,14 +763,12 @@ private:
 
   void DrawFrame() 
   {
-    vkWaitForFences(device, 1, &m_sync.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences  (device, 1, &m_sync.inFlightFences[currentFrame]);
-
     uint32_t imageIndex;
     vkAcquireNextImageKHR(device, screen.swapChain, UINT64_MAX, m_sync.imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     VkSemaphore      waitSemaphores[] = { m_sync.imageAvailableSemaphores[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -633,6 +783,7 @@ private:
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores    = signalSemaphores;
 
+    vkResetFences(device, 1, &m_sync.inFlightFences[currentFrame]); 
     if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_sync.inFlightFences[currentFrame]) != VK_SUCCESS)
       throw std::runtime_error("[DrawFrame]: failed to submit draw command buffer!");
 
@@ -648,6 +799,16 @@ private:
     presentInfo.pImageIndices   = &imageIndex;
 
     vkQueuePresentKHR(presentQueue, &presentInfo);
+    vkWaitForFences(device, 1, &m_sync.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    
+    // update camera and other
+    //
+    for(int i=0;i<commandBuffers.size();i++)
+    {
+      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[i], screen.swapChainExtent, graphicsPipeline, pipelineLayout, m_vbo, 
+                         commandBuffers[i]);
+    }
+
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
 
