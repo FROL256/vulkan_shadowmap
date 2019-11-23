@@ -73,4 +73,3 @@ cmesh::SimpleMesh cmesh::CreateQuad(const int a_sizeX, const int a_sizeY, const 
 
   return res;
 }
-

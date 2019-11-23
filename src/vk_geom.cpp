@@ -72,14 +72,13 @@ void vk_geom::CompactMesh_T3V4x2F::DestroyBuffersIfNeeded()
   }
 }
 
-void vk_geom::CompactMesh_T3V4x2F::UpdateAndBind(const cmesh::SimpleMesh& a_mesh, MemoryLocation a_loc)
+void vk_geom::CompactMesh_T3V4x2F::BindBuffers(int a_vertNum, int a_indexNum, MemoryLocation a_loc)
 {
-
   if((m_memStorage != a_loc) && !a_loc.IsEmpty()) // rebound is needed
   {
     DestroyBuffersIfNeeded();
 
-    const size_t f4size = a_mesh.VerticesNum()*sizeof(float)*4;
+    const size_t f4size = a_vertNum*sizeof(float)*4;
     
     VkBufferCreateInfo bufferCreateInfo = {};
     bufferCreateInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -90,17 +89,24 @@ void vk_geom::CompactMesh_T3V4x2F::UpdateAndBind(const cmesh::SimpleMesh& a_mesh
     VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, m_vertexBuffers + 0));
     VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, m_vertexBuffers + 1)); 
 
-    bufferCreateInfo.usage       = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferCreateInfo.size  = a_indexNum;
     VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_indexBuffer));  
 
     VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[0], m_memStorage.memStorage, 0));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[0], m_memStorage.memStorage, 1*f4size));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[1], m_memStorage.memStorage, 1*f4size));
     VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_indexBuffer,      m_memStorage.memStorage, 2*f4size));
   }
-  
-  if(m_memStorage.IsEmpty())
-    throw std::runtime_error("[CompactMesh_T3V4x2F::UpdateAndBind()]: empty input and/or internal storage!");
 
+  if(m_memStorage.IsEmpty())
+    throw std::runtime_error("[CompactMesh_T3V4x2F::BindBuffers()]: empty input and/or internal storage!");
+}
+
+void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh, UpdateBuffersFunc a_updateOp, void* a_updateOpUserData)
+{
+  if(a_updateOp == nullptr)
+    throw std::runtime_error("[CompactMesh_T3V4x2F::Update()]: buffer update callback was not provided by user!");
+  
   std::vector<float> vPosNorm4f        (a_mesh.VerticesNum()*4);
   std::vector<float> vTexCoordAndTang4f(a_mesh.VerticesNum()*4);
 
@@ -117,7 +123,24 @@ void vk_geom::CompactMesh_T3V4x2F::UpdateAndBind(const cmesh::SimpleMesh& a_mesh
     vTexCoordAndTang4f[i*4+3] = 0.0f; // reserved
   }
   
-  // well, you have forgotten that you need separate dyncmic buffer for that, ups )
+  // well, we need separate staging buffer for that, ups )
+  // so, let user to do this
+  //
+  std::vector<BufferUpdateInfo> updates(3);
+
+  updates[0].dst  = m_vertexBuffers[0];
+  updates[0].src  = vPosNorm4f.data();
+  updates[0].size = sizeof(float)*vPosNorm4f.size();
+
+  updates[1].dst  = m_vertexBuffers[1];
+  updates[1].src  = vTexCoordAndTang4f.data();
+  updates[1].size = sizeof(float)*vTexCoordAndTang4f.size();
+
+  updates[2].dst  = m_indexBuffer;
+  updates[2].src  = a_mesh.indices.data();
+  updates[2].size = sizeof(int)*a_mesh.indices.size();
+
+  a_updateOp(updates, a_updateOpUserData);
 
   // // now we can update the data  
   // //
@@ -144,6 +167,32 @@ VkBuffer vk_geom::CompactMesh_T3V4x2F::IndexBuffer()
 
 VkPipelineVertexInputStateCreateInfo vk_geom::CompactMesh_T3V4x2F::VertexInputInfo()
 {
-  VkPipelineVertexInputStateCreateInfo info = {};
-  return info;   
+  VkVertexInputBindingDescription vInputBindings[2] = { };
+  vInputBindings[0].binding   = 0;
+  vInputBindings[0].stride    = sizeof(float) * 4;
+  vInputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  vInputBindings[1].binding   = 1;
+  vInputBindings[1].stride    = sizeof(float) * 4;
+  vInputBindings[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+  VkVertexInputAttributeDescription vAttributes[2] = {};
+  vAttributes[0].binding  = 0;
+  vAttributes[0].location = 0;
+  vAttributes[0].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vAttributes[0].offset   = 0;  
+  
+  vAttributes[1].binding  = 1;
+  vAttributes[1].location = 1;
+  vAttributes[1].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vAttributes[1].offset   = 0;  
+  
+  VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
+  vertexInputInfo.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInputInfo.vertexBindingDescriptionCount   = 2;
+  vertexInputInfo.vertexAttributeDescriptionCount = 2;
+  vertexInputInfo.pVertexBindingDescriptions      = vInputBindings;
+  vertexInputInfo.pVertexAttributeDescriptions    = vAttributes;
+
+  return vertexInputInfo;   
 }

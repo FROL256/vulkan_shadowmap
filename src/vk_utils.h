@@ -62,6 +62,15 @@ namespace vk_utils
 
   std::vector<uint32_t> ReadFile(const char* filename);
   VkShaderModule CreateShaderModule(VkDevice a_device, const std::vector<uint32_t>& code);
+
+  //struct CopyContext
+  //{
+  //  VkQueue         queue;
+  //  VkCommandBuffer cmdBuff;
+  //  VkBuffer        stagingBuff;
+  //  VkDeviceMemory  stagingBuffMemory;
+  //};
+
 };
 
 #undef  RUN_TIME_ERROR
