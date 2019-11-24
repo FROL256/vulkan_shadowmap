@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <vector>
+#include <memory>
+
 #include <cstring>
 #include <cstdlib>
 #include <cstdint>
@@ -171,6 +173,8 @@ private:
   size_t currentFrame = 0;
   Camera m_cam;
 
+  std::unique_ptr<vk_utils::SimpleCopyHelper> m_pCopyHelper;
+
   void InitWindow() 
   {
     glfwInit();
@@ -294,6 +298,8 @@ private:
                               &screen);
 
     vk_utils::CreateScreenImageViews(device, &screen);
+
+    m_pCopyHelper = std::make_unique<vk_utils::SimpleCopyHelper>(physicalDevice, device, 64*1024*1024);
   }
 
   void CreateResources()
@@ -369,6 +375,8 @@ private:
 
   void Cleanup() 
   { 
+    m_pCopyHelper = nullptr; // smart pointer will destroy resources
+
     // free our vbo
     vkFreeMemory(device, m_vboMem, NULL);
     vkDestroyBuffer(device, m_vbo, NULL);

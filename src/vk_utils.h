@@ -63,13 +63,32 @@ namespace vk_utils
   std::vector<uint32_t> ReadFile(const char* filename);
   VkShaderModule CreateShaderModule(VkDevice a_device, const std::vector<uint32_t>& code);
 
-  //struct CopyContext
-  //{
-  //  VkQueue         queue;
-  //  VkCommandBuffer cmdBuff;
-  //  VkBuffer        stagingBuff;
-  //  VkDeviceMemory  stagingBuffMemory;
-  //};
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  struct SimpleCopyHelper // implements strairforward ("Now/Immediate") copy strategy. 
+  {
+    SimpleCopyHelper(VkPhysicalDevice a_physicalDevice, VkDevice a_device, size_t a_stagingBuffSize);
+    ~SimpleCopyHelper();
+
+  private:
+
+    VkQueue         queue;
+    VkCommandPool   cmdPool;
+    VkCommandBuffer cmdBuff;
+
+    VkBuffer        stagingBuff;
+    VkDeviceMemory  stagingBuffMemory;
+
+    VkPhysicalDevice physDev;
+    VkDevice         dev;
+
+
+    SimpleCopyHelper(const SimpleCopyHelper& rhs) {}
+    SimpleCopyHelper& operator=(const SimpleCopyHelper& rhs) { return *this; }
+  };
 
 };
 
