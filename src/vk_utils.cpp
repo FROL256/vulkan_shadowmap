@@ -304,6 +304,7 @@ VkDevice vk_utils::CreateLogicalDevice(uint32_t queueFamilyIndex, VkPhysicalDevi
   // Specify any desired device features here. We do not need any for this application, though.
   //
   VkPhysicalDeviceFeatures deviceFeatures = {};
+  deviceFeatures.fillModeNonSolid = VK_TRUE;   // me want to darw lines also
 
   deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceCreateInfo.enabledLayerCount    = uint32_t(a_enabledLayers.size());  // need to specify validation layers here as well.
@@ -659,7 +660,7 @@ vk_utils::SimpleCopyHelper::~SimpleCopyHelper()
 }
 
 
-void vk_utils::SimpleCopyHelper::UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, void* a_src, size_t a_size)
+void vk_utils::SimpleCopyHelper::UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size)
 {
   assert(a_dstOffset % 4 == 0);
   assert(a_size      % 4 == 0);

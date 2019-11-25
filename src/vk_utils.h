@@ -69,12 +69,25 @@ namespace vk_utils
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  struct SimpleCopyHelper // implements strairforward ("Now/Immediate") copy strategy. 
+  struct ICopyEngine
+  {
+    ICopyEngine(){}
+    virtual ~ICopyEngine(){}
+
+    virtual void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) = 0;
+
+  protected:
+    ICopyEngine(const ICopyEngine& rhs) {}
+    ICopyEngine& operator=(const ICopyEngine& rhs) { return *this; }    
+  };
+
+
+  struct SimpleCopyHelper : public ICopyEngine
   {
     SimpleCopyHelper(VkPhysicalDevice a_physicalDevice, VkDevice a_device, VkQueue a_transferQueue, size_t a_stagingBuffSize);
     ~SimpleCopyHelper();
 
-    void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, void* a_src, size_t a_size);
+    void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) override;
 
   private:
 

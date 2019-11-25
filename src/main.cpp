@@ -24,8 +24,8 @@
 
 #include "Camera.h"
 
-const int WIDTH  = 800;
-const int HEIGHT = 600;
+const int WIDTH  = 1024;
+const int HEIGHT = 1024;
 
 const int MAX_FRAMES_IN_FLIGHT = 1;
 
@@ -159,9 +159,7 @@ private:
   VkCommandPool                commandPool;
   std::vector<VkCommandBuffer> commandBuffers;
 
-  VkBuffer       m_vbo    = nullptr;         
-  VkDeviceMemory m_vboMem = nullptr;       // we will store our vertices data here
-  VkDeviceMemory m_memAllMeshes = nullptr; //
+  VkDeviceMemory               m_memAllMeshes = nullptr; //
 
   struct SyncObj
   {
@@ -317,23 +315,9 @@ private:
   
     CreateScreenFrameBuffers(device, renderPass, &screen);
 
-    CreateVertexBuffer(device, physicalDevice, 6*2*sizeof(float),
-                       &m_vbo, &m_vboMem);
-
   
     CreateSyncObjects(device, &m_sync);
 
-    
-    // put our vertices to GPU
-    //
-    float trianglePos[] =
-    {
-      -0.5f, -0.5f,
-      0.5f, -0.5f,
-      0.0f, +0.5f,
-    };
-
-    m_pCopyHelper->UpdateBuffer(m_vbo, 0, trianglePos, 6*2*sizeof(float));
 
     // create terrain mesh
     //
@@ -357,12 +341,12 @@ private:
     VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllMeshes));
 
     m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
-
+    m_pTerrainMesh->Update(meshData, m_pCopyHelper.get());
 
     CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
                            &pipelineLayout, &graphicsPipeline);
 
-    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout, m_vbo,
+    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout,
                                  &commandBuffers);
 
   }
@@ -408,12 +392,8 @@ private:
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
 
-    // free our vbo
-    vkFreeMemory(device, m_vboMem, NULL);
-    vkDestroyBuffer(device, m_vbo, NULL);
-
+    // free our vbos
     vkFreeMemory(device, m_memAllMeshes, NULL);
-
 
     if (enableValidationLayers)
     {
@@ -554,7 +534,7 @@ private:
     rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable        = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_LINE
+    rasterizer.polygonMode             = VK_POLYGON_MODE_LINE; // VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_LINE
     rasterizer.lineWidth               = 1.0f;
     rasterizer.cullMode                = VK_CULL_MODE_NONE; // VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace               = VK_FRONT_FACE_CLOCKWISE;
@@ -621,7 +601,7 @@ private:
   }
 
   void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo,  VkExtent2D a_frameBufferExtent, 
-                          VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout, VkBuffer a_vPosBuffer,
+                          VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
                           VkCommandBuffer& a_cmdBuff)
   {
     vkResetCommandBuffer(a_cmdBuff, 0);
@@ -680,7 +660,7 @@ private:
 
 
   void CreateAndWriteCommandBuffers(VkDevice a_device, VkCommandPool a_cmdPool, std::vector<VkFramebuffer> a_swapChainFramebuffers, VkExtent2D a_frameBufferExtent,
-                                    VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout, VkBuffer a_vPosBuffer,
+                                    VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
                                     std::vector<VkCommandBuffer>* a_cmdBuffers) 
   {
     std::vector<VkCommandBuffer>& commandBuffers = (*a_cmdBuffers);
@@ -698,7 +678,7 @@ private:
 
     for (size_t i = 0; i < commandBuffers.size(); i++) 
     {
-      WriteCommandBuffer(a_renderPass, a_swapChainFramebuffers[i], a_frameBufferExtent, a_graphicsPipeline, a_layout, a_vPosBuffer, 
+      WriteCommandBuffer(a_renderPass, a_swapChainFramebuffers[i], a_frameBufferExtent, a_graphicsPipeline, a_layout, 
                          commandBuffers[i]);
     }
   }
@@ -726,35 +706,6 @@ private:
     }
   }
 
-  static void CreateVertexBuffer(VkDevice a_device, VkPhysicalDevice a_physDevice, const size_t a_bufferSize,
-                                 VkBuffer *a_pBuffer, VkDeviceMemory *a_pBufferMemory)
-  {
-   
-    VkBufferCreateInfo bufferCreateInfo = {};
-    bufferCreateInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.pNext       = nullptr;
-    bufferCreateInfo.size        = a_bufferSize;                         
-    bufferCreateInfo.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;            
-
-    VK_CHECK_RESULT(vkCreateBuffer(a_device, &bufferCreateInfo, NULL, a_pBuffer)); // create bufferStaging.
-
-                
-    VkMemoryRequirements memoryRequirements;
-    vkGetBufferMemoryRequirements(a_device, (*a_pBuffer), &memoryRequirements);
-
-
-    VkMemoryAllocateInfo allocateInfo = {};
-    allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocateInfo.pNext           = nullptr;
-    allocateInfo.allocationSize  = memoryRequirements.size; // specify required memory.
-    allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, a_physDevice); // #NOTE VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-
-    VK_CHECK_RESULT(vkAllocateMemory(a_device, &allocateInfo, NULL, a_pBufferMemory));   // allocate memory on device.
-
-    VK_CHECK_RESULT(vkBindBufferMemory(a_device, (*a_pBuffer), (*a_pBufferMemory), 0));  // Now associate that allocated memory with the bufferStaging. With that, the bufferStaging is backed by actual memory.
-  }
-
   void DrawFrame() 
   {
     vkWaitForFences(device, 1, &m_sync.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
@@ -766,7 +717,7 @@ private:
     // update next used command buffer
     //
     {
-      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[imageIndex], screen.swapChainExtent, graphicsPipeline, pipelineLayout, m_vbo, 
+      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[imageIndex], screen.swapChainExtent, graphicsPipeline, pipelineLayout, 
                          commandBuffers[imageIndex]);
     }
 

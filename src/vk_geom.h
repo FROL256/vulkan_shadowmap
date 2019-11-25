@@ -14,6 +14,8 @@
 
 #include "cmesh.h"
 
+#include "vk_utils.h" // #TODO: remome this!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 namespace vk_geom
 {
 
@@ -66,7 +68,7 @@ namespace vk_geom
     * \param a_mesh - input simple mesh
  
     */
-    virtual void                                 Update(const cmesh::SimpleMesh& a_mesh) = 0;
+    virtual void                                 Update(const cmesh::SimpleMesh& a_mesh, vk_utils::ICopyEngine* a_pCopyEngine) = 0;
     
     virtual std::vector<VkBuffer>                VertexBuffers()   = 0;
     virtual VkBuffer                             IndexBuffer()     = 0;
@@ -110,7 +112,7 @@ namespace vk_geom
     VkMemoryRequirements                 CreateBuffers(int a_vertNum, int a_indexNum)                        override;
     void                                 BindBuffers(VkDeviceMemory a_memStorage, size_t a_offset)           override;
 
-    void                                 Update(const cmesh::SimpleMesh& a_mesh)                             override;
+    void                                 Update(const cmesh::SimpleMesh& a_mesh, vk_utils::ICopyEngine* a_pCopyEngine) override;
     
     std::vector<VkBuffer>                VertexBuffers()   override;
     VkBuffer                             IndexBuffer()     override;

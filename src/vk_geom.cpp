@@ -102,7 +102,7 @@ VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(int a_vertNum, 
   VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_vertexBuffers[0]));
   VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_vertexBuffers[1]));
 
-  bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   bufferCreateInfo.size  = a_indexNum*sizeof(int);
   VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_indexBuffer));
   
@@ -151,10 +151,11 @@ void vk_geom::CompactMesh_T3V4x2F::BindBuffers(VkDeviceMemory a_memStorage, size
     RUN_TIME_ERROR("[CompactMesh_T3V4x2F::BindBuffers()]: empty input and/or internal storage!");
 }
 
-void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh)
+void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh, vk_utils::ICopyEngine* a_pCopyEngine)
 {
   assert(a_mesh.VerticesNum() == m_vertNum);
   assert(a_mesh.IndicesNum()  == m_indNum);
+  assert(a_pCopyEngine        != nullptr);
 
   std::vector<float> vPosNorm4f        (a_mesh.VerticesNum()*4);
   std::vector<float> vTexCoordAndTang4f(a_mesh.VerticesNum()*4);
@@ -171,40 +172,10 @@ void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh)
     vTexCoordAndTang4f[i*4+2] = as_float(EncodeNormal(a_mesh.vTang4f.data() + i*4));
     vTexCoordAndTang4f[i*4+3] = 0.0f; // reserved
   }
-  
-  // well, we need separate staging buffer for that, ups )
-  // so, let user to do this
-  //
-  /*
-  std::vector<BufferUpdateInfo> updates(3);
 
-  updates[0].dst  = m_vertexBuffers[0];
-  updates[0].src  = vPosNorm4f.data();
-  updates[0].size = sizeof(float)*vPosNorm4f.size();
-
-  updates[1].dst  = m_vertexBuffers[1];
-  updates[1].src  = vTexCoordAndTang4f.data();
-  updates[1].size = sizeof(float)*vTexCoordAndTang4f.size();
-
-  updates[2].dst  = m_indexBuffer;
-  updates[2].src  = a_mesh.indices.data();
-  updates[2].size = sizeof(int)*a_mesh.indices.size();
-
-  a_updateOp(updates, a_updateOpUserData);
-  */
-
-
-  // // now we can update the data  
-  // //
-  // { 
-  //   const size_t size = MemoryAmount(a_mesh.VerticesNum(), a_mesh.IndicesNum());
-  //   void *mappedMemory = nullptr;
-  //   vkMapMemory(m_memStorage.dev, m_memStorage.memStorage, 0, size, 0, &mappedMemory);
-  //   memcpy(mappedMemory + 0*sizeof(float)*vPosNorm4f.size(), vPosNorm4f.data(),         sizeof(float)*vPosNorm4f.size());
-  //   memcpy(mappedMemory + 1*sizeof(float)*vPosNorm4f.size(), vTexCoordAndTang4f.data(), sizeof(float)*vTexCoordAndTang4f.size());
-  //   memcpy(mappedMemory + 2*sizeof(float)*vPosNorm4f.size(), a_mesh.indices.data(),  sizeof(int)*a_mesh.indices.size());
-  //   vkUnmapMemory(m_memStorage.dev, m_memStorage.memStorage);
-  // }
+  a_pCopyEngine->UpdateBuffer(m_vertexBuffers[0], 0, vPosNorm4f.data(),         sizeof(float)*vPosNorm4f.size());
+  a_pCopyEngine->UpdateBuffer(m_vertexBuffers[1], 0, vTexCoordAndTang4f.data(), sizeof(float)*vTexCoordAndTang4f.size());
+  a_pCopyEngine->UpdateBuffer(m_indexBuffer,      0, a_mesh.indices.data(),     sizeof(int)*a_mesh.indices.size());
 }
 
 std::vector<VkBuffer> vk_geom::CompactMesh_T3V4x2F::VertexBuffers()
