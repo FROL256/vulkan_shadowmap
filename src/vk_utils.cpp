@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include <cmath>
+#include <cassert>
 
 #include <algorithm>
 #ifdef WIN32
@@ -384,6 +385,35 @@ VkShaderModule vk_utils::CreateShaderModule(VkDevice a_device, const std::vector
   return shaderModule;
 }
 
+void vk_utils::ExecuteCommandBufferNow(VkCommandBuffer a_cmdBuff, VkQueue a_queue, VkDevice a_device)
+{
+  // Now we shall finally submit the recorded command bufferStaging to a queue.
+  //
+  VkSubmitInfo submitInfo       = {};
+  submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitInfo.commandBufferCount = 1; // submit a single command bufferStaging
+  submitInfo.pCommandBuffers    = &a_cmdBuff; // the command bufferStaging to submit.
+
+  VkFence fence;
+  VkFenceCreateInfo fenceCreateInfo = {};
+  fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceCreateInfo.flags = 0;
+  VK_CHECK_RESULT(vkCreateFence(a_device, &fenceCreateInfo, NULL, &fence));
+
+  // We submit the command bufferStaging on the queue, at the same time giving a fence.
+  //
+  VK_CHECK_RESULT(vkQueueSubmit(a_queue, 1, &submitInfo, fence));
+
+  // The command will not have finished executing until the fence is signalled.
+  // So we wait here. We will directly after this read our bufferStaging from the GPU,
+  // and we will not be sure that the command has finished executing unless we wait for the fence.
+  // Hence, we use a fence here.
+  //
+  VK_CHECK_RESULT(vkWaitForFences(a_device, 1, &fence, VK_TRUE, 100000000000));
+
+  vkDestroyFence(a_device, fence, NULL);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -433,10 +463,12 @@ VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
 
 VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) 
 {
-  for (const auto& availablePresentMode : availablePresentModes) {
-    if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+  for (const auto& availablePresentMode : availablePresentModes) 
+  {
+    if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
       return availablePresentMode;
-    }
+    else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+      return availablePresentMode;
   }
 
   return VK_PRESENT_MODE_FIFO_KHR;
@@ -563,7 +595,7 @@ static void CreateStagingBuffer(VkDevice a_device, VkPhysicalDevice a_physDevice
   VkBufferCreateInfo bufferCreateInfo = {};
   bufferCreateInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferCreateInfo.size        = a_bufferSize; // bufferStaging size in bytes.
-  bufferCreateInfo.usage       = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT; // bufferStaging is used as a storage bufferStaging and we can _copy_to_ it. #NOTE this!
+  bufferCreateInfo.usage       = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT; 
   bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // bufferStaging is exclusive to a single queue family at a time
   VK_CHECK_RESULT(vkCreateBuffer(a_device, &bufferCreateInfo, NULL, a_pBuffer)); // create bufferStaging
   // But the bufferStaging doesn't allocate memory for itself, so we must do that manually.
@@ -590,13 +622,11 @@ static void CreateStagingBuffer(VkDevice a_device, VkPhysicalDevice a_physDevice
   VK_CHECK_RESULT(vkBindBufferMemory(a_device, (*a_pBuffer), (*a_pBufferMemory), 0));
 }
 
-vk_utils::SimpleCopyHelper::SimpleCopyHelper(VkPhysicalDevice a_physicalDevice, VkDevice a_device, size_t a_stagingBuffSize)
+vk_utils::SimpleCopyHelper::SimpleCopyHelper(VkPhysicalDevice a_physicalDevice, VkDevice a_device, VkQueue a_transferQueue, size_t a_stagingBuffSize)
 {
   physDev = a_physicalDevice;
   dev     = a_device;
-
-  auto queueFID = vk_utils::GetQueueFamilyIndex(a_physicalDevice, VK_QUEUE_TRANSFER_BIT);
-  vkGetDeviceQueue(a_device, queueFID, 0, &queue);
+  queue   = a_transferQueue;
 
   VkCommandPoolCreateInfo poolInfo = {};
   poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -615,6 +645,8 @@ vk_utils::SimpleCopyHelper::SimpleCopyHelper(VkPhysicalDevice a_physicalDevice, 
 
   CreateStagingBuffer(a_device, a_physicalDevice, a_stagingBuffSize, 
                       &stagingBuff, &stagingBuffMemory);
+
+  stagingSize = a_stagingBuffSize;
 }
 
 vk_utils::SimpleCopyHelper::~SimpleCopyHelper()
@@ -624,4 +656,54 @@ vk_utils::SimpleCopyHelper::~SimpleCopyHelper()
 
   vkFreeCommandBuffers(dev, cmdPool, 1, &cmdBuff);
   vkDestroyCommandPool(dev, cmdPool, nullptr);
+}
+
+
+void vk_utils::SimpleCopyHelper::UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, void* a_src, size_t a_size)
+{
+  assert(a_dstOffset % 4 == 0);
+  assert(a_size      % 4 == 0);
+
+  if (a_size <= 65536)
+  //if(false)
+  {
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    vkResetCommandBuffer(cmdBuff, 0);
+    vkBeginCommandBuffer(cmdBuff, &beginInfo);
+    vkCmdUpdateBuffer   (cmdBuff, a_dst, a_dstOffset, a_size, a_src);
+    vkEndCommandBuffer  (cmdBuff);
+  }
+  else
+  {
+    if (a_size > stagingSize)
+    {
+      std::stringstream strOut;
+      strOut << "[vk_utils::SimpleCopyHelper::UpdateBuffer]: too large input size " << a_size << ", please allocate larger staging buff";
+      throw std::runtime_error(strOut.str().c_str());
+    }
+
+    void* mappedMemory = nullptr;
+    vkMapMemory(dev, stagingBuffMemory, 0, a_size, 0, &mappedMemory);
+    memcpy(mappedMemory, a_src, a_size);
+    vkUnmapMemory(dev, stagingBuffMemory);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    vkResetCommandBuffer(cmdBuff, 0);
+    vkBeginCommandBuffer(cmdBuff, &beginInfo);
+     
+    VkBufferCopy region0 = {};
+    region0.srcOffset = 0;
+    region0.dstOffset = a_dstOffset;
+    region0.size      = a_size;
+
+    vkCmdCopyBuffer(cmdBuff, stagingBuff, a_dst, 1, &region0);
+
+    vkEndCommandBuffer(cmdBuff);
+  }
+
+  vk_utils::ExecuteCommandBufferNow(cmdBuff, queue, dev);
 }

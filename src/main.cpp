@@ -148,8 +148,7 @@ private:
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
 
-  VkQueue graphicsQueue;
-  VkQueue presentQueue;
+  VkQueue graphicsQueue, presentQueue, transferQueue;
 
   vk_utils::ScreenBufferResources screen;
 
@@ -271,8 +270,9 @@ private:
     if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
       throw std::runtime_error("glfwCreateWindowSurface: failed to create window surface!");
   
-    physicalDevice = vk_utils::FindPhysicalDevice(instance, true, deviceId);
-    auto queueFID  = vk_utils::GetQueueFamilyIndex(physicalDevice, VK_QUEUE_GRAPHICS_BIT);
+    physicalDevice    = vk_utils::FindPhysicalDevice(instance, true, deviceId);
+    auto queueFID     = vk_utils::GetQueueFamilyIndex(physicalDevice, VK_QUEUE_GRAPHICS_BIT);
+    auto queueCopyFID = vk_utils::GetQueueFamilyIndex(physicalDevice, VK_QUEUE_TRANSFER_BIT);
 
     VkBool32 presentSupport = false;
     vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFID, surface, &presentSupport);
@@ -280,8 +280,9 @@ private:
       throw std::runtime_error("vkGetPhysicalDeviceSurfaceSupportKHR: no present support for the target device and graphics queue");
 
     device = vk_utils::CreateLogicalDevice(queueFID, physicalDevice, enabledLayers, deviceExtensions);
-    vkGetDeviceQueue(device, queueFID, 0, &graphicsQueue);
-    vkGetDeviceQueue(device, queueFID, 0, &presentQueue);
+    vkGetDeviceQueue(device, queueFID,     0, &graphicsQueue);
+    vkGetDeviceQueue(device, queueFID,     0, &presentQueue);
+    vkGetDeviceQueue(device, queueCopyFID, 0, &transferQueue);
     
     // ==> commadnPool
     {
@@ -299,7 +300,7 @@ private:
 
     vk_utils::CreateScreenImageViews(device, &screen);
 
-    m_pCopyHelper = std::make_unique<vk_utils::SimpleCopyHelper>(physicalDevice, device, 64*1024*1024);
+    m_pCopyHelper = std::make_unique<vk_utils::SimpleCopyHelper>(physicalDevice, device, transferQueue, 64*1024*1024);
   }
 
   void CreateResources()
@@ -315,7 +316,7 @@ private:
   
     CreateScreenFrameBuffers(device, renderPass, &screen);
 
-    CreateVertexBuffer(device, physicalDevice, 6 * sizeof(float),
+    CreateVertexBuffer(device, physicalDevice, 6*2*sizeof(float),
                        &m_vbo, &m_vboMem);
 
     CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout, m_vbo,
@@ -323,7 +324,7 @@ private:
 
     CreateSyncObjects(device, &m_sync);
 
-   
+    
     // put our vertices to GPU
     //
     float trianglePos[] =
@@ -333,8 +334,8 @@ private:
       0.0f, +0.5f,
     };
 
-    PutTriangleVerticesToVBO_Now(device, commandPool, graphicsQueue, trianglePos, 6*2,
-                                 m_vbo);
+    m_pCopyHelper->UpdateBuffer(m_vbo, 0, trianglePos, 6*2*sizeof(float));
+
   }
 
 
@@ -726,64 +727,6 @@ private:
 
     VK_CHECK_RESULT(vkBindBufferMemory(a_device, (*a_pBuffer), (*a_pBufferMemory), 0));  // Now associate that allocated memory with the bufferStaging. With that, the bufferStaging is backed by actual memory.
   }
-
-  static void RunCommandBuffer(VkCommandBuffer a_cmdBuff, VkQueue a_queue, VkDevice a_device)
-  {
-    // Now we shall finally submit the recorded command bufferStaging to a queue.
-    //
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1; // submit a single command bufferStaging
-    submitInfo.pCommandBuffers    = &a_cmdBuff; // the command bufferStaging to submit.
-                                         
-    VkFence fence;
-    VkFenceCreateInfo fenceCreateInfo = {};
-    fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceCreateInfo.flags = 0;
-    VK_CHECK_RESULT(vkCreateFence(a_device, &fenceCreateInfo, NULL, &fence));
-
-    // We submit the command bufferStaging on the queue, at the same time giving a fence.
-    //
-    VK_CHECK_RESULT(vkQueueSubmit(a_queue, 1, &submitInfo, fence));
-
-    // The command will not have finished executing until the fence is signalled.
-    // So we wait here. We will directly after this read our bufferStaging from the GPU,
-    // and we will not be sure that the command has finished executing unless we wait for the fence.
-    // Hence, we use a fence here.
-    //
-    VK_CHECK_RESULT(vkWaitForFences(a_device, 1, &fence, VK_TRUE, 100000000000));
-
-    vkDestroyFence(a_device, fence, NULL);
-  }
-
-  // An example function that immediately copy vertex data to GPU
-  //
-  static void PutTriangleVerticesToVBO_Now(VkDevice a_device, VkCommandPool a_pool, VkQueue a_queue, float* a_triPos, int a_floatsNum,
-                                           VkBuffer a_buffer)
-  {
-    VkCommandBufferAllocateInfo allocInfo = {};
-    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool        = a_pool;
-    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer cmdBuff;
-    if (vkAllocateCommandBuffers(a_device, &allocInfo, &cmdBuff) != VK_SUCCESS)
-      throw std::runtime_error("[PutTriangleVerticesToVBO_Now]: failed to allocate command buffer!");
-
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
-    
-    vkBeginCommandBuffer(cmdBuff, &beginInfo);
-    vkCmdUpdateBuffer   (cmdBuff, a_buffer, 0, a_floatsNum * sizeof(float), a_triPos);
-    vkEndCommandBuffer  (cmdBuff);
-
-    RunCommandBuffer(cmdBuff, a_queue, a_device);
-
-    vkFreeCommandBuffers(a_device, a_pool, 1, &cmdBuff);
-  }
-
 
   void DrawFrame() 
   {

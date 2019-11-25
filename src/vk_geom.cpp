@@ -82,8 +82,10 @@ void vk_geom::CompactMesh_T3V4x2F::BindBuffers(int a_vertNum, int a_indexNum, Me
     
     VkBufferCreateInfo bufferCreateInfo = {};
     bufferCreateInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size        = f4size;
-    bufferCreateInfo.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; // this class assume GPU simulation for mesh, i.e. we want to write buffer in the compute shader 
+    bufferCreateInfo.size        = f4size;  
+    // this class assume GPU simulation for mesh, i.e. we want to write buffer in the compute shader 
+    // we also want to transfer data there .. 
+    bufferCreateInfo.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT; 
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, m_vertexBuffers + 0));
