@@ -62,12 +62,6 @@ void vk_geom::CompactMesh_T3V4x2F::SetVulkanContext(VulkanContext a_context)
   m_transferQueue  = a_context.transferQueue;
 }
 
-size_t vk_geom::CompactMesh_T3V4x2F::MemoryAmount(int a_vertNum, int a_indexNum)
-{
-  return a_vertNum*sizeof(float)*8 + sizeof(int)*a_indexNum;
-}
-
-
 void vk_geom::CompactMesh_T3V4x2F::DestroyBuffersIfNeeded()
 {
   if(m_vertexBuffers[0] != nullptr && m_indexBuffer != nullptr)
@@ -75,6 +69,17 @@ void vk_geom::CompactMesh_T3V4x2F::DestroyBuffersIfNeeded()
     vkDestroyBuffer(m_dev, m_vertexBuffers[0], NULL);
     vkDestroyBuffer(m_dev, m_vertexBuffers[1], NULL);
     vkDestroyBuffer(m_dev, m_indexBuffer, NULL);
+  }
+}
+
+size_t Padding(size_t a_size, size_t a_aligment)
+{
+  if(a_size % a_aligment == 0)
+    return a_size;
+  else
+  {
+    size_t sizeCut = a_size - (a_size % a_aligment);
+    return sizeCut + a_aligment;
   }
 }
 
@@ -88,26 +93,42 @@ VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(int a_vertNum, 
 
   VkBufferCreateInfo bufferCreateInfo = {};
   bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferCreateInfo.size = f4size;
+  bufferCreateInfo.size  = f4size;
   // this class assume GPU simulation for mesh, i.e. we want to write buffer in the compute shader 
   // we also want to transfer data there .. 
-  bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  bufferCreateInfo.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_vertexBuffers[0]));
   VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_vertexBuffers[1]));
 
   bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-  bufferCreateInfo.size = a_indexNum;
+  bufferCreateInfo.size  = a_indexNum*sizeof(int);
   VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_indexBuffer));
-
-  VkMemoryRequirements memoryRequirements;
-  vkGetBufferMemoryRequirements(m_dev, m_vertexBuffers[0], &memoryRequirements);
-
+  
   m_vertNum = a_vertNum;
   m_indNum  = a_indexNum;
 
-  return memoryRequirements;
+  // piece of shit with memory aligment
+  //
+  VkMemoryRequirements memoryRequirements[3];
+  vkGetBufferMemoryRequirements(m_dev, m_vertexBuffers[0], &memoryRequirements[0]);
+  vkGetBufferMemoryRequirements(m_dev, m_vertexBuffers[1], &memoryRequirements[1]);
+  vkGetBufferMemoryRequirements(m_dev, m_indexBuffer,      &memoryRequirements[2]);
+
+  buffOffsets[0] = 0;
+  buffOffsets[1] = Padding(memoryRequirements[0].size                             , memoryRequirements[1].alignment);
+  buffOffsets[2] = Padding(memoryRequirements[0].size + memoryRequirements[1].size, memoryRequirements[2].alignment);
+
+  memoryRequirements[0].size = buffOffsets[2] + memoryRequirements[2].size;
+
+  assert(memoryRequirements[0].alignment == memoryRequirements[1].alignment);
+  assert(memoryRequirements[0].alignment == memoryRequirements[2].alignment);
+
+  assert(memoryRequirements[0].memoryTypeBits == memoryRequirements[1].memoryTypeBits);
+  assert(memoryRequirements[0].memoryTypeBits == memoryRequirements[2].memoryTypeBits);
+
+  return memoryRequirements[0];
 }
 
 void vk_geom::CompactMesh_T3V4x2F::BindBuffers(VkDeviceMemory a_memStorage, size_t a_offset)
@@ -118,11 +139,12 @@ void vk_geom::CompactMesh_T3V4x2F::BindBuffers(VkDeviceMemory a_memStorage, size
 
   if((m_memStorage != a_loc) && !a_loc.IsEmpty()) // rebound is needed
   {
-    const size_t f4size = m_vertNum*sizeof(float)*4;
+    m_memStorage.memStorage      = a_memStorage;
+    m_memStorage.offsetInStorage = a_offset;
    
-    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[0], m_memStorage.memStorage, 0));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[1], m_memStorage.memStorage, 1*f4size));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_indexBuffer,      m_memStorage.memStorage, 2*f4size));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[0], m_memStorage.memStorage, buffOffsets[0] ));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[1], m_memStorage.memStorage, buffOffsets[1] ));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_indexBuffer,      m_memStorage.memStorage, buffOffsets[2] ));
   }
 
   if(m_memStorage.IsEmpty())
@@ -197,7 +219,6 @@ VkBuffer vk_geom::CompactMesh_T3V4x2F::IndexBuffer()
 
 VkPipelineVertexInputStateCreateInfo vk_geom::CompactMesh_T3V4x2F::VertexInputInfo()
 {
-  VkVertexInputBindingDescription vInputBindings[2] = { };
   vInputBindings[0].binding   = 0;
   vInputBindings[0].stride    = sizeof(float) * 4;
   vInputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
@@ -206,11 +227,10 @@ VkPipelineVertexInputStateCreateInfo vk_geom::CompactMesh_T3V4x2F::VertexInputIn
   vInputBindings[1].stride    = sizeof(float) * 4;
   vInputBindings[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-  VkVertexInputAttributeDescription vAttributes[2] = {};
   vAttributes[0].binding  = 0;
   vAttributes[0].location = 0;
-  vAttributes[0].format   = VK_FORMAT_R32G32B32A32_SFLOAT;
-  vAttributes[0].offset   = 0;  
+  vAttributes[0].format   = VK_FORMAT_R32G32B32A32_SFLOAT; 
+  vAttributes[0].offset   = 0;   
   
   vAttributes[1].binding  = 1;
   vAttributes[1].location = 1;

@@ -314,18 +314,13 @@ private:
 
     CreateRenderPass(device, screen.swapChainImageFormat, 
                      &renderPass);
-
-    CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
-                           &pipelineLayout, &graphicsPipeline);
   
     CreateScreenFrameBuffers(device, renderPass, &screen);
 
     CreateVertexBuffer(device, physicalDevice, 6*2*sizeof(float),
                        &m_vbo, &m_vboMem);
 
-    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout, m_vbo,
-                                 &commandBuffers);
-
+  
     CreateSyncObjects(device, &m_sync);
 
     
@@ -362,6 +357,14 @@ private:
     VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllMeshes));
 
     m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
+
+
+    CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
+                           &pipelineLayout, &graphicsPipeline);
+
+    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout, m_vbo,
+                                 &commandBuffers);
+
   }
 
 
@@ -496,11 +499,14 @@ private:
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
 
-  static void CreateGraphicsPipeline(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass,
-                                     VkPipelineLayout* a_pLayout, VkPipeline* a_pPipiline)
+  void CreateGraphicsPipeline(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass,
+                              VkPipelineLayout* a_pLayout, VkPipeline* a_pPipiline)
   {
-    auto vertShaderCode = vk_utils::ReadFile("shaders/vert.spv");
-    auto fragShaderCode = vk_utils::ReadFile("shaders/frag.spv");
+    //auto vertShaderCode = vk_utils::ReadFile("shaders/vert.spv");
+    //auto fragShaderCode = vk_utils::ReadFile("shaders/frag.spv");
+
+    auto vertShaderCode = vk_utils::ReadFile("shaders/cmesh_t3x4x2.spv");
+    auto fragShaderCode = vk_utils::ReadFile("shaders/direct_light.spv");
 
     VkShaderModule vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
     VkShaderModule fragShaderModule = vk_utils::CreateShaderModule(a_device, fragShaderCode);
@@ -519,24 +525,6 @@ private:
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-
-    VkVertexInputBindingDescription vInputBinding = { };
-    vInputBinding.binding   = 0;
-    vInputBinding.stride    = sizeof(float) * 2;
-    vInputBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    VkVertexInputAttributeDescription vAttribute = {};
-    vAttribute.binding  = 0;
-    vAttribute.location = 0;
-    vAttribute.format   = VK_FORMAT_R32G32_SFLOAT;
-    vAttribute.offset   = 0;
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount   = 1;
-    vertexInputInfo.vertexAttributeDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions      = &vInputBinding;
-    vertexInputInfo.pVertexAttributeDescriptions    = &vAttribute;
     
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -607,6 +595,9 @@ private:
     if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
 
+    assert(m_pTerrainMesh != nullptr);
+    auto vertexInputInfo = m_pTerrainMesh->VertexInputInfo();
+
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.stageCount          = 2;
@@ -667,12 +658,18 @@ private:
 
       // say we want to take vertices pos from a_vPosBuffer
       {
-        VkBuffer vertexBuffers[] = { a_vPosBuffer };
-        VkDeviceSize offsets[]   = { 0 };
-        vkCmdBindVertexBuffers(a_cmdBuff, 0, 1, vertexBuffers, offsets);
+        auto vertexBuffers = m_pTerrainMesh->VertexBuffers();
+        auto indexBuffer   = m_pTerrainMesh->IndexBuffer();
+
+        std::vector<VkDeviceSize> offsets(vertexBuffers.size());
+        for(auto& offs : offsets) 
+          offs = 0;
+        
+        vkCmdBindVertexBuffers(a_cmdBuff, 0, vertexBuffers.size(), vertexBuffers.data(), offsets.data());
+        vkCmdBindIndexBuffer  (a_cmdBuff, indexBuffer, 0, m_pTerrainMesh->IndexType());
       }
 
-      vkCmdDraw(a_cmdBuff, 3, 1, 0, 0);
+      vkCmdDrawIndexed(a_cmdBuff, m_pTerrainMesh->IndicesNum(), 1, 0, 0, 0);
 
       vkCmdEndRenderPass(a_cmdBuff);
     }

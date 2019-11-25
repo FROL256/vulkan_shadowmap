@@ -41,15 +41,6 @@ namespace vk_geom
     * \brief set vulkan objects that will be used by the implementation
     */
     virtual void SetVulkanContext(VulkanContext a_context) = 0;
-
-   /**
-    * \brief Tells us the amount of device memory that is needed for the mesh. 
-    * \param a_vertNum     - input vertices number
-    * \param a_indexNum    - input indices number
-    * 
-    *        An application level should use this function to determine the correct amount of memory which application level must allocate itself before it decide to update mesh
-    */
-    virtual size_t               MemoryAmount(int a_vertNum, int a_indexNum) = 0;
     
     /**
     * \brief Creates internal buffer objects but DO NOT allocate memory and do not bind buffers to a memory location
@@ -80,6 +71,10 @@ namespace vk_geom
     virtual std::vector<VkBuffer>                VertexBuffers()   = 0;
     virtual VkBuffer                             IndexBuffer()     = 0;
     virtual VkPipelineVertexInputStateCreateInfo VertexInputInfo() = 0;
+    
+    virtual size_t      VerticesNum() const  = 0;
+    virtual size_t      IndicesNum()  const  = 0;
+    virtual VkIndexType IndexType()   const { return VK_INDEX_TYPE_UINT32; }
 
   protected:
 
@@ -93,7 +88,7 @@ namespace vk_geom
   
       bool operator==(const MemoryLocation& rhs) const { return (memStorage == rhs.memStorage) && (offsetInStorage == rhs.offsetInStorage); }
       bool operator!=(const MemoryLocation& rhs) const { return (memStorage != rhs.memStorage) || (offsetInStorage != rhs.offsetInStorage); }
-      bool IsEmpty()                             const { return *(this) != MemoryLocation(); }
+      bool IsEmpty()                             const { return (memStorage == nullptr); }
   
       VkDeviceMemory   memStorage;
       size_t           offsetInStorage;
@@ -112,7 +107,6 @@ namespace vk_geom
 
     void                                 SetVulkanContext(VulkanContext a_context)                           override;
 
-    size_t                               MemoryAmount(int a_vertNum, int a_indexNum)                         override;
     VkMemoryRequirements                 CreateBuffers(int a_vertNum, int a_indexNum)                        override;
     void                                 BindBuffers(VkDeviceMemory a_memStorage, size_t a_offset)           override;
 
@@ -122,18 +116,27 @@ namespace vk_geom
     VkBuffer                             IndexBuffer()     override;
     VkPipelineVertexInputStateCreateInfo VertexInputInfo() override;
 
+    size_t                               VerticesNum() const  override { return size_t(m_vertNum); };
+    size_t                               IndicesNum()  const  override { return size_t(m_indNum); };
+
   protected:
 
-   void DestroyBuffersIfNeeded();
+    void DestroyBuffersIfNeeded();
 
-   VkBuffer         m_vertexBuffers[2];
-   VkBuffer         m_indexBuffer;
-   MemoryLocation   m_memStorage;
-   VkPhysicalDevice m_physDev;
-   VkDevice         m_dev;
-   VkQueue          m_transferQueue;
+    VkBuffer         m_vertexBuffers[2];
+    VkBuffer         m_indexBuffer;
+    MemoryLocation   m_memStorage;
+    VkPhysicalDevice m_physDev;
+    VkDevice         m_dev;
+    VkQueue          m_transferQueue;
 
-   int m_vertNum, m_indNum;
+    int m_vertNum, m_indNum;
+
+    // temporary data
+    //
+    VkVertexInputBindingDescription   vInputBindings[2] = {};
+    VkVertexInputAttributeDescription vAttributes[2]    = {};
+    size_t                            buffOffsets[3]    = {};
 
   };
 
