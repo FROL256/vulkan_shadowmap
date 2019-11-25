@@ -346,7 +346,7 @@ std::vector<uint32_t> vk_utils::ReadFile(const char* filename)
   FILE* fp = fopen(filename, "rb");
   if (fp == NULL)
   {
-    std::string errorMsg = std::string("vk_utils::ReadFile, can't open file ") + std::string(filename);
+    std::string errorMsg = std::string("[vk_utils::ReadFile]: can't open file ") + std::string(filename);
     RUN_TIME_ERROR(errorMsg.c_str());
   }
 

@@ -16,26 +16,13 @@
 
 namespace vk_geom
 {
-  struct MemoryLocation
-  {
-    MemoryLocation() : dev(nullptr), memStorage(nullptr), offsetInStorage(0) { }
-    MemoryLocation(VkDevice a_dev, VkDeviceMemory a_mem, size_t a_offs) : dev(a_dev), memStorage(a_mem), offsetInStorage(a_offs) {}
-
-    bool operator==(const MemoryLocation& rhs) const { return (dev == rhs.dev) && (memStorage == rhs.memStorage) && (offsetInStorage == rhs.offsetInStorage); }
-    bool operator!=(const MemoryLocation& rhs) const { return (dev != rhs.dev) || (memStorage != rhs.memStorage) || (offsetInStorage != rhs.offsetInStorage); }
-    bool IsEmpty()                             const { return *(this) != MemoryLocation(); }
-
-    VkDevice         dev;
-    VkDeviceMemory   memStorage;
-    size_t           offsetInStorage;
-  };
 
   struct VulkanContext
   {
-    VkDevice         dev;
-    VkPhysicalDevice physDev;
-    VkQueue          transferQueue;
-    //VkQueue          computeQueue;
+    VkDevice         dev           = nullptr;
+    VkPhysicalDevice physDev       = nullptr;
+    VkQueue          transferQueue = nullptr;
+    VkQueue          computeQueue  = nullptr;
   };
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -75,15 +62,13 @@ namespace vk_geom
 
     /**
     * \brief Bind mesh vertex and index buffers to the memory location
-    * \param a_vertNum  - input vertices number
-    * \param a_indexNum - input indices number
     * \param a_memLoc   - input memory storage for mesh (must be allocated by the application level itself)
     
-    *        This function binds internal buffer objects to a device memory location (a_memLoc.memStorage + a_memLoc.offsetInStorage) of MemoryAmount(...) size.
-    *        If internal buffers are already bound to some memory location, they will be rebound in the case when a_memLoc data members are differs to previous call.
-    *        The implementation must remember a_memLoc parameters (but it does not own the storage, the application does).
+    *        This function binds internal buffer objects to a device memory location (a_memStorage + a_offset) of MemoryAmount(...) size.
+    *        If internal buffers are already bound to some memory location, they will be rebound in the case when input parameters are differs to previous call.
+    *        The implementation must remember parameters (but it does not own the storage, the application does).
     */
-    virtual void BindBuffers(int a_vertNum, int a_indexNum, MemoryLocation a_memLoc) = 0;
+    virtual void BindBuffers(VkDeviceMemory a_memStorage, size_t a_offset) = 0;
 
    /**
     * \brief Updates GPU data (i.e. from CPU to GPU).
@@ -97,8 +82,23 @@ namespace vk_geom
     virtual VkPipelineVertexInputStateCreateInfo VertexInputInfo() = 0;
 
   protected:
+
     IMesh(const IMesh& a_rhs) = delete;
     IMesh& operator=(const IMesh& a_rhs) = delete;
+
+    struct MemoryLocation
+    {
+      MemoryLocation() : memStorage(nullptr), offsetInStorage(0) { }
+      MemoryLocation(VkDeviceMemory a_mem, size_t a_offs) : memStorage(a_mem), offsetInStorage(a_offs) {}
+  
+      bool operator==(const MemoryLocation& rhs) const { return (memStorage == rhs.memStorage) && (offsetInStorage == rhs.offsetInStorage); }
+      bool operator!=(const MemoryLocation& rhs) const { return (memStorage != rhs.memStorage) || (offsetInStorage != rhs.offsetInStorage); }
+      bool IsEmpty()                             const { return *(this) != MemoryLocation(); }
+  
+      VkDeviceMemory   memStorage;
+      size_t           offsetInStorage;
+    };
+
   };
   
   // pack all vertex attributes in 2 float4, store them in 2 buffers. 
@@ -114,8 +114,8 @@ namespace vk_geom
 
     size_t                               MemoryAmount(int a_vertNum, int a_indexNum)                         override;
     VkMemoryRequirements                 CreateBuffers(int a_vertNum, int a_indexNum)                        override;
+    void                                 BindBuffers(VkDeviceMemory a_memStorage, size_t a_offset)           override;
 
-    void                                 BindBuffers(int a_vertNum, int a_indexNum, MemoryLocation a_memLoc) override;
     void                                 Update(const cmesh::SimpleMesh& a_mesh)                             override;
     
     std::vector<VkBuffer>                VertexBuffers()   override;
@@ -130,7 +130,10 @@ namespace vk_geom
    VkBuffer         m_indexBuffer;
    MemoryLocation   m_memStorage;
    VkPhysicalDevice m_physDev;
+   VkDevice         m_dev;
    VkQueue          m_transferQueue;
+
+   int m_vertNum, m_indNum;
 
   };
 

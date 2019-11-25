@@ -57,7 +57,7 @@ vk_geom::CompactMesh_T3V4x2F::~CompactMesh_T3V4x2F()
 
 void vk_geom::CompactMesh_T3V4x2F::SetVulkanContext(VulkanContext a_context)
 {
-  m_memStorage.dev = a_context.dev;
+  m_dev            = a_context.dev;
   m_physDev        = a_context.physDev;
   m_transferQueue  = a_context.transferQueue;
 }
@@ -72,15 +72,15 @@ void vk_geom::CompactMesh_T3V4x2F::DestroyBuffersIfNeeded()
 {
   if(m_vertexBuffers[0] != nullptr && m_indexBuffer != nullptr)
   {
-    vkDestroyBuffer(m_memStorage.dev, m_vertexBuffers[0], NULL);
-    vkDestroyBuffer(m_memStorage.dev, m_vertexBuffers[1], NULL);
-    vkDestroyBuffer(m_memStorage.dev, m_indexBuffer, NULL);
+    vkDestroyBuffer(m_dev, m_vertexBuffers[0], NULL);
+    vkDestroyBuffer(m_dev, m_vertexBuffers[1], NULL);
+    vkDestroyBuffer(m_dev, m_indexBuffer, NULL);
   }
 }
 
 VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(int a_vertNum, int a_indexNum)
 {
-  assert(m_memStorage.dev != nullptr); // you should set Vulkan context before using this function
+  assert(m_dev != nullptr); // you should set Vulkan context before using this function
 
   DestroyBuffersIfNeeded();
 
@@ -94,36 +94,46 @@ VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(int a_vertNum, 
   bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-  VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_vertexBuffers[0]));
-  VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_vertexBuffers[1]));
+  VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_vertexBuffers[0]));
+  VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_vertexBuffers[1]));
 
   bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
   bufferCreateInfo.size = a_indexNum;
-  VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_indexBuffer));
+  VK_CHECK_RESULT(vkCreateBuffer(m_dev, &bufferCreateInfo, NULL, &m_indexBuffer));
 
   VkMemoryRequirements memoryRequirements;
-  vkGetBufferMemoryRequirements(m_memStorage.dev, m_vertexBuffers[0], &memoryRequirements);
+  vkGetBufferMemoryRequirements(m_dev, m_vertexBuffers[0], &memoryRequirements);
+
+  m_vertNum = a_vertNum;
+  m_indNum  = a_indexNum;
 
   return memoryRequirements;
 }
 
-void vk_geom::CompactMesh_T3V4x2F::BindBuffers(int a_vertNum, int a_indexNum, MemoryLocation a_loc)
+void vk_geom::CompactMesh_T3V4x2F::BindBuffers(VkDeviceMemory a_memStorage, size_t a_offset)
 {
+  assert(m_dev != nullptr); // you should set Vulkan context before using this function
+
+  auto a_loc = MemoryLocation{a_memStorage, a_offset};
+
   if((m_memStorage != a_loc) && !a_loc.IsEmpty()) // rebound is needed
   {
-    const size_t f4size = a_vertNum*sizeof(float)*4;
+    const size_t f4size = m_vertNum*sizeof(float)*4;
    
-    VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[0], m_memStorage.memStorage, 0));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[1], m_memStorage.memStorage, 1*f4size));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_indexBuffer,      m_memStorage.memStorage, 2*f4size));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[0], m_memStorage.memStorage, 0));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[1], m_memStorage.memStorage, 1*f4size));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_indexBuffer,      m_memStorage.memStorage, 2*f4size));
   }
 
   if(m_memStorage.IsEmpty())
-    throw std::runtime_error("[CompactMesh_T3V4x2F::BindBuffers()]: empty input and/or internal storage!");
+    RUN_TIME_ERROR("[CompactMesh_T3V4x2F::BindBuffers()]: empty input and/or internal storage!");
 }
 
 void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh)
 {
+  assert(a_mesh.VerticesNum() == m_vertNum);
+  assert(a_mesh.IndicesNum()  == m_indNum);
+
   std::vector<float> vPosNorm4f        (a_mesh.VerticesNum()*4);
   std::vector<float> vTexCoordAndTang4f(a_mesh.VerticesNum()*4);
 

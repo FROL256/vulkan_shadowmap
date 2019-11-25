@@ -361,9 +361,7 @@ private:
     
     VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllMeshes));
 
-
-    //m_pTerrainMesh->BindBuffers(meshData.VerticesNum(), meshData.IndicesNum(), );
-
+    m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
   }
 
 
