@@ -159,8 +159,9 @@ private:
   VkCommandPool                commandPool;
   std::vector<VkCommandBuffer> commandBuffers;
 
-  VkBuffer       m_vbo;     //  
-  VkDeviceMemory m_vboMem;  // we will store our vertices data here
+  VkBuffer       m_vbo    = nullptr;         
+  VkDeviceMemory m_vboMem = nullptr;       // we will store our vertices data here
+  VkDeviceMemory m_memAllMeshes = nullptr; //
 
   struct SyncObj
   {
@@ -173,6 +174,9 @@ private:
   Camera m_cam;
 
   std::unique_ptr<vk_utils::SimpleCopyHelper> m_pCopyHelper;
+  std::shared_ptr<vk_geom::IMesh>             m_pTerrainMesh;
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////
 
   void InitWindow() 
   {
@@ -336,6 +340,30 @@ private:
 
     m_pCopyHelper->UpdateBuffer(m_vbo, 0, trianglePos, 6*2*sizeof(float));
 
+    // create terrain mesh
+    //
+    auto pTerrain  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
+    m_pTerrainMesh = pTerrain;
+
+    m_pTerrainMesh->SetVulkanContext(vk_geom::VulkanContext{device, physicalDevice, transferQueue});
+
+    auto meshData = cmesh::CreateQuad(32, 32, 2.0f);
+
+    auto memReq   = m_pTerrainMesh->CreateBuffers(meshData.VerticesNum(), meshData.IndicesNum());
+
+    // allocate memory for all meshes
+    //
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.pNext           = nullptr;
+    allocateInfo.allocationSize  = memReq.size; // specify required memory.
+    allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice); 
+    
+    VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllMeshes));
+
+
+    //m_pTerrainMesh->BindBuffers(meshData.VerticesNum(), meshData.IndicesNum(), );
+
   }
 
 
@@ -376,11 +404,15 @@ private:
 
   void Cleanup() 
   { 
-    m_pCopyHelper = nullptr; // smart pointer will destroy resources
+    m_pCopyHelper  = nullptr; // smart pointer will destroy resources
+    m_pTerrainMesh = nullptr; // smart pointer will destroy resources
 
     // free our vbo
     vkFreeMemory(device, m_vboMem, NULL);
     vkDestroyBuffer(device, m_vbo, NULL);
+
+    vkFreeMemory(device, m_memAllMeshes, NULL);
+
 
     if (enableValidationLayers)
     {
@@ -536,7 +568,7 @@ private:
     rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable        = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
+    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_LINE
     rasterizer.lineWidth               = 1.0f;
     rasterizer.cullMode                = VK_CULL_MODE_NONE; // VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace               = VK_FRONT_FACE_CLOCKWISE;

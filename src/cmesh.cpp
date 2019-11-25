@@ -34,7 +34,7 @@ cmesh::SimpleMesh cmesh::CreateQuad(const int a_sizeX, const int a_sizeY, const 
   const int quadsNum = a_sizeX*a_sizeY;
   const int vertNum  = vertNumX*vertNumY;
 
-  cmesh::SimpleMesh res(vertNum, quadsNum*2);
+  cmesh::SimpleMesh res(vertNum, quadsNum*2*3);
 
   const float edgeLength  = a_size / float(a_sizeX);
   const float edgeLength2 = sqrtf(2.0f)*edgeLength;

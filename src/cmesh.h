@@ -30,7 +30,8 @@ namespace cmesh
       vTang4f.resize(a_vertNum*4);
       vTexCoord2f.resize(a_vertNum*2);
       indices.resize(a_indNum);
-      matIndices.resize(a_indNum/3); assert(a_indNum%3 == 0); // PLEASE NOTE THAT CURRENT IMPLEMENTATION ASSUME ONLY TRIANGLE MESHES! 
+      matIndices.resize(a_indNum/3); 
+      assert(a_indNum%3 == 0); // PLEASE NOTE THAT CURRENT IMPLEMENTATION ASSUME ONLY TRIANGLE MESHES! 
     };
 
     std::vector<float> vPos4f;      // 

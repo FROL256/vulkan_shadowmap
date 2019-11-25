@@ -47,13 +47,19 @@ vk_geom::CompactMesh_T3V4x2F::CompactMesh_T3V4x2F()
 {
    m_vertexBuffers[0] = nullptr;
    m_vertexBuffers[1] = nullptr;
-   m_indexBuffer      = nullptr;
-   
+   m_indexBuffer      = nullptr;   
 }
 
 vk_geom::CompactMesh_T3V4x2F::~CompactMesh_T3V4x2F()
 {
-    
+  DestroyBuffersIfNeeded();
+}
+
+void vk_geom::CompactMesh_T3V4x2F::SetVulkanContext(VulkanContext a_context)
+{
+  m_memStorage.dev = a_context.dev;
+  m_physDev        = a_context.physDev;
+  m_transferQueue  = a_context.transferQueue;
 }
 
 size_t vk_geom::CompactMesh_T3V4x2F::MemoryAmount(int a_vertNum, int a_indexNum)
@@ -72,29 +78,41 @@ void vk_geom::CompactMesh_T3V4x2F::DestroyBuffersIfNeeded()
   }
 }
 
+VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(int a_vertNum, int a_indexNum)
+{
+  assert(m_memStorage.dev != nullptr); // you should set Vulkan context before using this function
+
+  DestroyBuffersIfNeeded();
+
+  const size_t f4size = a_vertNum * sizeof(float) * 4;
+
+  VkBufferCreateInfo bufferCreateInfo = {};
+  bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufferCreateInfo.size = f4size;
+  // this class assume GPU simulation for mesh, i.e. we want to write buffer in the compute shader 
+  // we also want to transfer data there .. 
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+  VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_vertexBuffers[0]));
+  VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_vertexBuffers[1]));
+
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  bufferCreateInfo.size = a_indexNum;
+  VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_indexBuffer));
+
+  VkMemoryRequirements memoryRequirements;
+  vkGetBufferMemoryRequirements(m_memStorage.dev, m_vertexBuffers[0], &memoryRequirements);
+
+  return memoryRequirements;
+}
+
 void vk_geom::CompactMesh_T3V4x2F::BindBuffers(int a_vertNum, int a_indexNum, MemoryLocation a_loc)
 {
   if((m_memStorage != a_loc) && !a_loc.IsEmpty()) // rebound is needed
   {
-    DestroyBuffersIfNeeded();
-
     const size_t f4size = a_vertNum*sizeof(float)*4;
-    
-    VkBufferCreateInfo bufferCreateInfo = {};
-    bufferCreateInfo.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size        = f4size;  
-    // this class assume GPU simulation for mesh, i.e. we want to write buffer in the compute shader 
-    // we also want to transfer data there .. 
-    bufferCreateInfo.usage       = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT; 
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, m_vertexBuffers + 0));
-    VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, m_vertexBuffers + 1)); 
-
-    bufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    bufferCreateInfo.size  = a_indexNum;
-    VK_CHECK_RESULT(vkCreateBuffer(m_memStorage.dev, &bufferCreateInfo, NULL, &m_indexBuffer));  
-
+   
     VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[0], m_memStorage.memStorage, 0));
     VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_vertexBuffers[1], m_memStorage.memStorage, 1*f4size));
     VK_CHECK_RESULT(vkBindBufferMemory(m_memStorage.dev, m_indexBuffer,      m_memStorage.memStorage, 2*f4size));
@@ -104,11 +122,8 @@ void vk_geom::CompactMesh_T3V4x2F::BindBuffers(int a_vertNum, int a_indexNum, Me
     throw std::runtime_error("[CompactMesh_T3V4x2F::BindBuffers()]: empty input and/or internal storage!");
 }
 
-void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh, UpdateBuffersFunc a_updateOp, void* a_updateOpUserData)
+void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh)
 {
-  if(a_updateOp == nullptr)
-    throw std::runtime_error("[CompactMesh_T3V4x2F::Update()]: buffer update callback was not provided by user!");
-  
   std::vector<float> vPosNorm4f        (a_mesh.VerticesNum()*4);
   std::vector<float> vTexCoordAndTang4f(a_mesh.VerticesNum()*4);
 
@@ -128,6 +143,7 @@ void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh, Updat
   // well, we need separate staging buffer for that, ups )
   // so, let user to do this
   //
+  /*
   std::vector<BufferUpdateInfo> updates(3);
 
   updates[0].dst  = m_vertexBuffers[0];
@@ -143,6 +159,8 @@ void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh, Updat
   updates[2].size = sizeof(int)*a_mesh.indices.size();
 
   a_updateOp(updates, a_updateOpUserData);
+  */
+
 
   // // now we can update the data  
   // //

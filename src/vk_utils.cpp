@@ -696,9 +696,9 @@ void vk_utils::SimpleCopyHelper::UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset
     vkBeginCommandBuffer(cmdBuff, &beginInfo);
      
     VkBufferCopy region0 = {};
-    region0.srcOffset = 0;
-    region0.dstOffset = a_dstOffset;
-    region0.size      = a_size;
+    region0.srcOffset    = 0;
+    region0.dstOffset    = a_dstOffset;
+    region0.size         = a_size;
 
     vkCmdCopyBuffer(cmdBuff, stagingBuff, a_dst, 1, &region0);
 
