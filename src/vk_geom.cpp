@@ -55,16 +55,9 @@ vk_geom::CompactMesh_T3V4x2F::~CompactMesh_T3V4x2F()
   DestroyBuffersIfNeeded();
 }
 
-void vk_geom::CompactMesh_T3V4x2F::SetVulkanContext(VulkanContext a_context)
-{
-  m_dev            = a_context.dev;
-  m_physDev        = a_context.physDev;
-  m_transferQueue  = a_context.transferQueue;
-}
-
 void vk_geom::CompactMesh_T3V4x2F::DestroyBuffersIfNeeded()
 {
-  if(m_vertexBuffers[0] != nullptr && m_indexBuffer != nullptr)
+  if(m_vertexBuffers[0] != nullptr && m_indexBuffer != nullptr && m_dev != nullptr)
   {
     vkDestroyBuffer(m_dev, m_vertexBuffers[0], NULL);
     vkDestroyBuffer(m_dev, m_vertexBuffers[1], NULL);
@@ -83,9 +76,11 @@ size_t Padding(size_t a_size, size_t a_aligment)
   }
 }
 
-VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(int a_vertNum, int a_indexNum)
+VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(VkDevice a_dev, int a_vertNum, int a_indexNum)
 {
-  assert(m_dev != nullptr); // you should set Vulkan context before using this function
+  assert(a_dev != nullptr); // you should set Vulkan context before using this function
+
+  m_dev = a_dev;
 
   DestroyBuffersIfNeeded();
 
@@ -151,7 +146,7 @@ void vk_geom::CompactMesh_T3V4x2F::BindBuffers(VkDeviceMemory a_memStorage, size
     RUN_TIME_ERROR("[CompactMesh_T3V4x2F::BindBuffers()]: empty input and/or internal storage!");
 }
 
-void vk_geom::CompactMesh_T3V4x2F::Update(const cmesh::SimpleMesh& a_mesh, vk_utils::ICopyEngine* a_pCopyEngine)
+void vk_geom::CompactMesh_T3V4x2F::UpdateBuffers(const cmesh::SimpleMesh& a_mesh, ICopyEngine* a_pCopyEngine)
 {
   assert(a_mesh.VerticesNum() == m_vertNum);
   assert(a_mesh.IndicesNum()  == m_indNum);
@@ -188,7 +183,7 @@ VkBuffer vk_geom::CompactMesh_T3V4x2F::IndexBuffer()
   return m_indexBuffer;
 }
 
-VkPipelineVertexInputStateCreateInfo vk_geom::CompactMesh_T3V4x2F::VertexInputInfo()
+VkPipelineVertexInputStateCreateInfo vk_geom::CompactMesh_T3V4x2F::VertexInputLayout()
 {
   vInputBindings[0].binding   = 0;
   vInputBindings[0].stride    = sizeof(float) * 4;
@@ -216,4 +211,18 @@ VkPipelineVertexInputStateCreateInfo vk_geom::CompactMesh_T3V4x2F::VertexInputIn
   vertexInputInfo.pVertexAttributeDescriptions    = vAttributes;
 
   return vertexInputInfo;   
+}
+
+void vk_geom::CompactMesh_T3V4x2F::DrawCmd(VkCommandBuffer a_cmdBuff)
+{
+  auto vertexBuffers = this->VertexBuffers();
+  auto indexBuffer   = this->IndexBuffer();
+  
+  std::vector<VkDeviceSize> offsets(vertexBuffers.size());
+  for(auto& offs : offsets) 
+    offs = 0;
+  
+  vkCmdBindVertexBuffers(a_cmdBuff, 0, vertexBuffers.size(), vertexBuffers.data(), offsets.data());
+  vkCmdBindIndexBuffer  (a_cmdBuff, indexBuffer, 0, this->IndexType());
+  vkCmdDrawIndexed      (a_cmdBuff, this->IndicesNum(), 1, 0, 0, 0);
 }

@@ -21,6 +21,7 @@
 
 #include "vk_utils.h"
 #include "vk_geom.h"
+#include "vk_copy.h"
 
 #include "Camera.h"
 
@@ -115,6 +116,7 @@ void OnMouseScroll(GLFWwindow* window, double xoffset, double yoffset)
   g_input.scrollY = float(yoffset);
 }
 
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -170,11 +172,23 @@ private:
 
   size_t currentFrame = 0;
   Camera m_cam;
+  
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  struct CopyEngine : public vk_geom::ICopyEngine
+  {
+    CopyEngine(VkPhysicalDevice a_physicalDevice, VkDevice a_device, VkQueue a_transferQueue, size_t a_stagingBuffSize) : m_helper(a_physicalDevice, a_device, a_transferQueue, a_stagingBuffSize) {}
+  
+    void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) override { m_helper.UpdateBuffer(a_dst, a_dstOffset, a_src, a_size); }
+  
+  private:
+    vk_copy::SimpleCopyHelper m_helper;
+  };
 
-  std::unique_ptr<vk_utils::SimpleCopyHelper> m_pCopyHelper;
-  std::shared_ptr<vk_geom::IMesh>             m_pTerrainMesh;
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////
+  std::unique_ptr<CopyEngine>     m_pCopyHelper;
+  std::shared_ptr<vk_geom::IMesh> m_pTerrainMesh;
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   void InitWindow() 
   {
@@ -302,7 +316,7 @@ private:
 
     vk_utils::CreateScreenImageViews(device, &screen);
 
-    m_pCopyHelper = std::make_unique<vk_utils::SimpleCopyHelper>(physicalDevice, device, transferQueue, 64*1024*1024);
+    m_pCopyHelper = std::make_unique<CopyEngine>(physicalDevice, device, transferQueue, 64*1024*1024);
   }
 
   void CreateResources()
@@ -324,11 +338,9 @@ private:
     auto pTerrain  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
     m_pTerrainMesh = pTerrain;
 
-    m_pTerrainMesh->SetVulkanContext(vk_geom::VulkanContext{device, physicalDevice, transferQueue});
+    auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
 
-    auto meshData = cmesh::CreateQuad(32, 32, 2.0f);
-
-    auto memReq   = m_pTerrainMesh->CreateBuffers(meshData.VerticesNum(), meshData.IndicesNum());
+    auto memReq   = m_pTerrainMesh->CreateBuffers(device, meshData.VerticesNum(), meshData.IndicesNum());
 
     // allocate memory for all meshes
     //
@@ -341,7 +353,7 @@ private:
     VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllMeshes));
 
     m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
-    m_pTerrainMesh->Update(meshData, m_pCopyHelper.get());
+    m_pTerrainMesh->UpdateBuffers(meshData, m_pCopyHelper.get());
 
     CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
                            &pipelineLayout, &graphicsPipeline);
@@ -576,7 +588,7 @@ private:
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
 
     assert(m_pTerrainMesh != nullptr);
-    auto vertexInputInfo = m_pTerrainMesh->VertexInputInfo();
+    auto vertexInputInfo = m_pTerrainMesh->VertexInputLayout();
 
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -629,28 +641,20 @@ private:
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
-
+      
       LiteMath::float4x4 matrices[2];
-      const float aspect = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height);
-      matrices[0]        = LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
-      matrices[1]        = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
+      {
+        const float aspect = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height);
+        matrices[0]        = LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
+        matrices[1]        = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
+        
+        auto mrot          = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
+        matrices[0]        = LiteMath::mul(mrot, matrices[0]);                  // the order of matrix multiplication is inverted руку since the matrices are transposed (!!!)
+      }
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
 
-      // say we want to take vertices pos from a_vPosBuffer
-      {
-        auto vertexBuffers = m_pTerrainMesh->VertexBuffers();
-        auto indexBuffer   = m_pTerrainMesh->IndexBuffer();
-
-        std::vector<VkDeviceSize> offsets(vertexBuffers.size());
-        for(auto& offs : offsets) 
-          offs = 0;
-        
-        vkCmdBindVertexBuffers(a_cmdBuff, 0, vertexBuffers.size(), vertexBuffers.data(), offsets.data());
-        vkCmdBindIndexBuffer  (a_cmdBuff, indexBuffer, 0, m_pTerrainMesh->IndexType());
-      }
-
-      vkCmdDrawIndexed(a_cmdBuff, m_pTerrainMesh->IndicesNum(), 1, 0, 0, 0);
-
+      m_pTerrainMesh->DrawCmd(a_cmdBuff);
+     
       vkCmdEndRenderPass(a_cmdBuff);
     }
   

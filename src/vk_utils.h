@@ -64,49 +64,6 @@ namespace vk_utils
   VkShaderModule CreateShaderModule(VkDevice a_device, const std::vector<uint32_t>& code);
 
   void ExecuteCommandBufferNow(VkCommandBuffer a_cmdBuff, VkQueue a_queue, VkDevice a_device);
-
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  struct ICopyEngine
-  {
-    ICopyEngine(){}
-    virtual ~ICopyEngine(){}
-
-    virtual void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) = 0;
-
-  protected:
-    ICopyEngine(const ICopyEngine& rhs) {}
-    ICopyEngine& operator=(const ICopyEngine& rhs) { return *this; }    
-  };
-
-
-  struct SimpleCopyHelper : public ICopyEngine
-  {
-    SimpleCopyHelper(VkPhysicalDevice a_physicalDevice, VkDevice a_device, VkQueue a_transferQueue, size_t a_stagingBuffSize);
-    ~SimpleCopyHelper();
-
-    void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) override;
-
-  private:
-
-    VkQueue         queue;
-    VkCommandPool   cmdPool;
-    VkCommandBuffer cmdBuff;
-
-    VkBuffer        stagingBuff;
-    VkDeviceMemory  stagingBuffMemory;
-    size_t          stagingSize;
-
-    VkPhysicalDevice physDev;
-    VkDevice         dev;
-
-
-    SimpleCopyHelper(const SimpleCopyHelper& rhs) {}
-    SimpleCopyHelper& operator=(const SimpleCopyHelper& rhs) { return *this; }
-  };
-
 };
 
 #undef  RUN_TIME_ERROR
