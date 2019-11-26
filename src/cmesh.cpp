@@ -1,6 +1,8 @@
 #include "cmesh.h"
+#include "cmesh_vsgf.h"
 
 #include <cmath>
+#include <fstream>
 
 //#include "LiteMath.h"
 //using namespace LiteMath;
@@ -72,4 +74,31 @@ cmesh::SimpleMesh cmesh::CreateQuad(const int a_sizeX, const int a_sizeY, const 
   res.indices = CreateQuadTriIndices(a_sizeX, a_sizeY);
 
   return res;
+}
+
+cmesh::SimpleMesh cmesh::LoadMeshFromVSGF(const char* a_fileName)
+{
+  std::ifstream input(a_fileName, std::ios::binary);
+  if(!input.is_open())
+    return SimpleMesh();
+
+  cmesh::HydraGeomData data;
+  data.read(input); 
+
+  SimpleMesh res(data.getVerticesNumber(), data.getIndicesNumber());
+
+  memcpy(res.vPos4f.data(),      data.getVertexPositionsFloat4Array(), res.vPos4f.size()*sizeof(float));
+  memcpy(res.vNorm4f.data(),     data.getVertexNormalsFloat4Array(),   res.vNorm4f.size()*sizeof(float));
+  
+  if(data.getVertexTangentsFloat4Array() != nullptr)
+    memcpy(res.vTang4f.data(),     data.getVertexTangentsFloat4Array(),  res.vTang4f.size()*sizeof(float));
+  else
+    memset(res.vTang4f.data(), 0, res.vTang4f.size()*sizeof(float));
+
+  memcpy(res.vTexCoord2f.data(), data.getVertexTexcoordFloat2Array(),  res.vTexCoord2f.size()*sizeof(float));
+
+  memcpy(res.indices.data(),     data.getTriangleVertexIndicesArray(),   res.indices.size()*sizeof(int));
+  memcpy(res.matIndices.data(),  data.getTriangleMaterialIndicesArray(), res.matIndices.size()*sizeof(int));
+
+  return res; 
 }

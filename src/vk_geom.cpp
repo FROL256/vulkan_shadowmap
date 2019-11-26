@@ -115,7 +115,7 @@ VkMemoryRequirements vk_geom::CompactMesh_T3V4x2F::CreateBuffers(VkDevice a_dev,
   buffOffsets[1] = Padding(memoryRequirements[0].size                             , memoryRequirements[1].alignment);
   buffOffsets[2] = Padding(memoryRequirements[0].size + memoryRequirements[1].size, memoryRequirements[2].alignment);
 
-  memoryRequirements[0].size = buffOffsets[2] + memoryRequirements[2].size;
+  memoryRequirements[0].size = Padding(buffOffsets[2] + memoryRequirements[2].size, memoryRequirements[2].alignment); // this is actually may be an issue if some other buffer will need the same memory
 
   assert(memoryRequirements[0].alignment == memoryRequirements[1].alignment);
   assert(memoryRequirements[0].alignment == memoryRequirements[2].alignment);
@@ -137,9 +137,9 @@ void vk_geom::CompactMesh_T3V4x2F::BindBuffers(VkDeviceMemory a_memStorage, size
     m_memStorage.memStorage      = a_memStorage;
     m_memStorage.offsetInStorage = a_offset;
    
-    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[0], m_memStorage.memStorage, buffOffsets[0] ));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[1], m_memStorage.memStorage, buffOffsets[1] ));
-    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_indexBuffer,      m_memStorage.memStorage, buffOffsets[2] ));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[0], m_memStorage.memStorage, buffOffsets[0] + a_offset ));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_vertexBuffers[1], m_memStorage.memStorage, buffOffsets[1] + a_offset ));
+    VK_CHECK_RESULT(vkBindBufferMemory(m_dev, m_indexBuffer,      m_memStorage.memStorage, buffOffsets[2] + a_offset ));
   }
 
   if(m_memStorage.IsEmpty())

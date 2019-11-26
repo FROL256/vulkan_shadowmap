@@ -187,6 +187,8 @@ private:
 
   std::unique_ptr<CopyEngine>     m_pCopyHelper;
   std::shared_ptr<vk_geom::IMesh> m_pTerrainMesh;
+  std::shared_ptr<vk_geom::IMesh> m_pTeapotMesh;
+  std::shared_ptr<vk_geom::IMesh> m_pLucyMesh;
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -333,27 +335,43 @@ private:
     CreateSyncObjects(device, &m_sync);
 
 
-    // create terrain mesh
+    // create meshes
     //
-    auto pTerrain  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
-    m_pTerrainMesh = pTerrain;
+    m_pTerrainMesh = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
+    m_pTeapotMesh  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
+    m_pLucyMesh    = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
 
     auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
+    auto teapData = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
+    auto lucyData = cmesh::LoadMeshFromVSGF("data/lucy.vsgf");
 
-    auto memReq   = m_pTerrainMesh->CreateBuffers(device, meshData.VerticesNum(), meshData.IndicesNum());
+    if(teapData.VerticesNum() == 0)
+      RUN_TIME_ERROR("can't load mesh at 'data/teapot.vsgf'");
+
+    auto memReq1 = m_pTerrainMesh->CreateBuffers(device, meshData.VerticesNum(), meshData.IndicesNum()); // what if memReq1 and memReq2 differs in memoryTypeBits ... ? )
+    auto memReq2 = m_pTeapotMesh->CreateBuffers (device, teapData.VerticesNum(), teapData.IndicesNum()); //
+    auto memReq3 = m_pLucyMesh->CreateBuffers   (device, lucyData.VerticesNum(), lucyData.IndicesNum()); //
+
+    assert(memReq1.memoryTypeBits == memReq2.memoryTypeBits); // assume this in our simple demo
+    assert(memReq1.memoryTypeBits == memReq3.memoryTypeBits); // assume this in our simple demo
 
     // allocate memory for all meshes
     //
     VkMemoryAllocateInfo allocateInfo = {};
     allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocateInfo.pNext           = nullptr;
-    allocateInfo.allocationSize  = memReq.size; // specify required memory.
-    allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice); 
+    allocateInfo.allocationSize  = memReq1.size + memReq2.size + memReq3.size; // specify required memory size
+    allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReq1.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice); 
     
     VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllMeshes));
 
     m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
+    m_pTeapotMesh->BindBuffers (m_memAllMeshes, memReq1.size);
+    m_pLucyMesh->BindBuffers   (m_memAllMeshes, memReq1.size + memReq2.size);
+
     m_pTerrainMesh->UpdateBuffers(meshData, m_pCopyHelper.get());
+    m_pTeapotMesh->UpdateBuffers (teapData, m_pCopyHelper.get());
+    m_pLucyMesh->UpdateBuffers   (lucyData, m_pCopyHelper.get()); 
 
     CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
                            &pipelineLayout, &graphicsPipeline);
@@ -403,6 +421,8 @@ private:
   { 
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
+    m_pTeapotMesh  = nullptr;
+    m_pLucyMesh    = nullptr;
 
     // free our vbos
     vkFreeMemory(device, m_memAllMeshes, NULL);
@@ -641,20 +661,41 @@ private:
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
-      
+
+      const float aspect   = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
+      auto mProjTransposed = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
+      auto mLookAt         = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
+
+      // draw plane
       LiteMath::float4x4 matrices[2];
       {
-        const float aspect = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height);
-        matrices[0]        = LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
-        matrices[1]        = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
-        
-        auto mrot          = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
-        matrices[0]        = LiteMath::mul(mrot, matrices[0]);                  // the order of matrix multiplication is inverted руку since the matrices are transposed (!!!)
+        auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
+        matrices[0] = LiteMath::transpose(LiteMath::mul(mLookAt, mrot));  
+        matrices[1] = mProjTransposed;
       }
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
-
       m_pTerrainMesh->DrawCmd(a_cmdBuff);
-     
+      
+      // draw teapot
+      {
+        auto mtranslate = LiteMath::translate4x4({-0.85f, 0.4f, 0.0f});
+        matrices[0]     = LiteMath::transpose(LiteMath::mul(mLookAt, mtranslate));  
+        matrices[1]     = mProjTransposed;
+      }
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
+      m_pTeapotMesh->DrawCmd(a_cmdBuff);
+
+      // draw lucy
+      {
+        auto mtranslate = LiteMath::translate4x4({+0.85f, 0.0f, 0.0f});
+        auto mscale     = LiteMath::scale4x4({0.25, 0.25, 0.25});
+        matrices[0]     = LiteMath::transpose(LiteMath::mul(mLookAt, (LiteMath::mul(mtranslate, mscale))));  
+        matrices[1]     = mProjTransposed;
+      }
+
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
+      m_pLucyMesh->DrawCmd(a_cmdBuff);
+
       vkCmdEndRenderPass(a_cmdBuff);
     }
   

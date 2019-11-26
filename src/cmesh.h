@@ -20,9 +20,9 @@ namespace cmesh
     SimpleMesh(){}
     SimpleMesh(int a_vertNum, int a_indNum) { Resize(a_vertNum, a_indNum); }
 
-    inline size_t VerticesNum()  const { return vPos4f.size()/4;   }
-    inline size_t IndicesNum()   const { return indices.size(); }
-    inline size_t TrianglesNum() const { return IndicesNum()/3;    }
+    inline size_t VerticesNum()  const { return vPos4f.size()/4; }
+    inline size_t IndicesNum()   const { return indices.size();  }
+    inline size_t TrianglesNum() const { return IndicesNum()/3;  }
     inline void   Resize(int a_vertNum, int a_indNum) 
     {
       vPos4f.resize(a_vertNum*4);

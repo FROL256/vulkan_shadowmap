@@ -6,7 +6,7 @@
 
 struct Camera
 {
-  Camera() : pos(0.0f, 1.0f, -5.0f), lookAt(0, 0, 0), up(0, 1, 0), fov(45.0f), tdist(100.0f) {}
+  Camera() : pos(0.0f, 1.0f, +5.0f), lookAt(0, 0, 0), up(0, 1, 0), fov(45.0f), tdist(100.0f) {}
 
   LiteMath::float3 pos;
   LiteMath::float3 lookAt;
