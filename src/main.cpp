@@ -514,10 +514,7 @@ private:
   void CreateGraphicsPipeline(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass,
                               VkPipelineLayout* a_pLayout, VkPipeline* a_pPipiline)
   {
-    //auto vertShaderCode = vk_utils::ReadFile("shaders/vert.spv");
-    //auto fragShaderCode = vk_utils::ReadFile("shaders/frag.spv");
-
-    auto vertShaderCode = vk_utils::ReadFile("shaders/cmesh_t3x4x2.spv");
+    auto vertShaderCode = vk_utils::ReadFile("shaders/cmesh_t3v4x2.spv");
     auto fragShaderCode = vk_utils::ReadFile("shaders/direct_light.spv");
 
     VkShaderModule vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
@@ -566,7 +563,7 @@ private:
     rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable        = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode             = VK_POLYGON_MODE_LINE; // VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_LINE
+    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_LINE
     rasterizer.lineWidth               = 1.0f;
     rasterizer.cullMode                = VK_CULL_MODE_NONE; // VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace               = VK_FRONT_FACE_CLOCKWISE;
