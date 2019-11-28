@@ -153,6 +153,9 @@ private:
   VkQueue graphicsQueue, presentQueue, transferQueue;
 
   vk_utils::ScreenBufferResources screen;
+  VkImage        depthImage       = nullptr;
+  VkDeviceMemory depthImageMemory = nullptr;
+  VkImageView    depthImageView   = nullptr;
 
   VkRenderPass     renderPass;
   VkPipelineLayout pipelineLayout;
@@ -326,10 +329,13 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    vk_utils::CreateDepthTexture(device, physicalDevice, WIDTH, HEIGHT, 
+                                 &depthImageMemory, &depthImage, &depthImageView);
+
     CreateRenderPass(device, screen.swapChainImageFormat, 
                      &renderPass);
   
-    CreateScreenFrameBuffers(device, renderPass, &screen);
+    CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
 
   
     CreateSyncObjects(device, &m_sync);
@@ -427,6 +433,13 @@ private:
     // free our vbos
     vkFreeMemory(device, m_memAllMeshes, NULL);
 
+    if(depthImageMemory != nullptr)
+    {
+      vkFreeMemory      (device, depthImageMemory, NULL);
+      vkDestroyImageView(device, depthImageView, NULL);
+      vkDestroyImage    (device, depthImage, NULL);
+    }
+
     if (enableValidationLayers)
     {
       // destroy callback.
@@ -468,7 +481,7 @@ private:
     glfwTerminate();
   }
 
-  static void CreateRenderPass(VkDevice a_device, VkFormat a_swapChainImageFormat,
+  static void CreateRenderPass(VkDevice a_device, VkFormat a_swapChainImageFormat, 
                                VkRenderPass* a_pRenderPass)
   {
     VkAttachmentDescription colorAttachment = {};
@@ -498,10 +511,28 @@ private:
     dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+    // add depth test
+    //
+    VkAttachmentDescription depthAttachment = {};
+    depthAttachment.format         = VK_FORMAT_D32_SFLOAT;
+    depthAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentRef = {};
+    depthAttachmentRef.attachment = 1;
+    depthAttachmentRef.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};  
+  
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments    = &colorAttachment;
+    renderPassInfo.attachmentCount = 2;
+    renderPassInfo.pAttachments    = attachments.data();
     renderPassInfo.subpassCount    = 1;
     renderPassInfo.pSubpasses      = &subpass;
     renderPassInfo.dependencyCount = 1;
@@ -604,6 +635,14 @@ private:
     if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
 
+    VkPipelineDepthStencilStateCreateInfo depthStencilTest = {};
+    depthStencilTest.sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilTest.depthTestEnable       = true;  
+    depthStencilTest.depthWriteEnable      = true;
+    depthStencilTest.depthCompareOp        = VK_COMPARE_OP_LESS;
+    depthStencilTest.depthBoundsTestEnable = false;
+    depthStencilTest.stencilTestEnable     = false;
+
     assert(m_pTerrainMesh != nullptr);
     auto vertexInputInfo = m_pTerrainMesh->VertexInputLayout();
 
@@ -621,6 +660,7 @@ private:
     pipelineInfo.renderPass          = a_renderPass;
     pipelineInfo.subpass             = 0;
     pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
+    pipelineInfo.pDepthStencilState  = &depthStencilTest;
 
     if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, a_pPipiline) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create graphics pipeline!");
@@ -651,9 +691,9 @@ private:
       renderPassInfo.renderArea.offset = { 0, 0 };
       renderPassInfo.renderArea.extent = a_frameBufferExtent;
 
-      VkClearValue clearColor        = { 0.0f, 0.0f, 0.0f, 1.0f };
-      renderPassInfo.clearValueCount = 1;
-      renderPassInfo.pClearValues    = &clearColor;
+      VkClearValue clearColor[2]     = { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+      renderPassInfo.clearValueCount = 2;
+      renderPassInfo.pClearValues    = &clearColor[0];
 
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 

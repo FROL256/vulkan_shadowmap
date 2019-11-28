@@ -561,18 +561,18 @@ void vk_utils::CreateScreenImageViews(VkDevice a_device, ScreenBufferResources* 
 
 }
 
-void vk_utils::CreateScreenFrameBuffers(VkDevice a_device, VkRenderPass a_renderPass, ScreenBufferResources* pScreen)
+void vk_utils::CreateScreenFrameBuffers(VkDevice a_device, VkRenderPass a_renderPass, VkImageView a_depthView, ScreenBufferResources* pScreen)
 {
   pScreen->swapChainFramebuffers.resize(pScreen->swapChainImageViews.size());
 
   for (size_t i = 0; i < pScreen->swapChainImageViews.size(); i++) 
   {
-    VkImageView attachments[] = { pScreen->swapChainImageViews[i] };
+    VkImageView attachments[] = { pScreen->swapChainImageViews[i], a_depthView };
 
     VkFramebufferCreateInfo framebufferInfo = {};
     framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferInfo.renderPass      = a_renderPass;
-    framebufferInfo.attachmentCount = 1;
+    framebufferInfo.attachmentCount = 2;
     framebufferInfo.pAttachments    = attachments;
     framebufferInfo.width           = pScreen->swapChainExtent.width;
     framebufferInfo.height          = pScreen->swapChainExtent.height;
@@ -581,4 +581,50 @@ void vk_utils::CreateScreenFrameBuffers(VkDevice a_device, VkRenderPass a_render
     if (vkCreateFramebuffer(a_device, &framebufferInfo, nullptr, &pScreen->swapChainFramebuffers[i]) != VK_SUCCESS)
       throw std::runtime_error("failed to create framebuffer!");
   }
+}
+
+void vk_utils::CreateDepthTexture(VkDevice a_device, VkPhysicalDevice a_physDevice, const int a_width, const int a_height,
+                                  VkDeviceMemory *a_pImageMemory, VkImage *a_image, VkImageView* a_imageView)
+{
+  VkImageCreateInfo imgCreateInfo = {};
+  imgCreateInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  imgCreateInfo.pNext         = nullptr;
+  imgCreateInfo.flags         = 0; // not sure about this ...
+  imgCreateInfo.imageType     = VK_IMAGE_TYPE_2D;
+  imgCreateInfo.format        = VK_FORMAT_D32_SFLOAT;
+  imgCreateInfo.extent        = VkExtent3D{uint32_t(a_width), uint32_t(a_height), 1};
+  imgCreateInfo.mipLevels     = 1;
+  imgCreateInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+  imgCreateInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+  imgCreateInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  imgCreateInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+  imgCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  imgCreateInfo.arrayLayers   = 1;
+  VK_CHECK_RESULT(vkCreateImage(a_device, &imgCreateInfo, nullptr, a_image));
+
+  VkMemoryRequirements memoryRequirements;
+  vkGetImageMemoryRequirements(a_device, (*a_image), &memoryRequirements);
+  
+  VkMemoryAllocateInfo allocateInfo = {};
+  allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocateInfo.allocationSize  = memoryRequirements.size; // specify required memory.
+  allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, a_physDevice);
+  VK_CHECK_RESULT(vkAllocateMemory(a_device, &allocateInfo, NULL, a_pImageMemory)); // allocate memory on device.
+  VK_CHECK_RESULT(vkBindImageMemory(a_device, (*a_image), (*a_pImageMemory), 0));
+
+  VkImageViewCreateInfo imageViewInfo = {};
+
+  imageViewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  imageViewInfo.flags    = 0;
+  imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  imageViewInfo.format   = VK_FORMAT_D32_SFLOAT;
+
+  imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+  imageViewInfo.subresourceRange.baseMipLevel   = 0;
+  imageViewInfo.subresourceRange.baseArrayLayer = 0;
+  imageViewInfo.subresourceRange.layerCount     = 1;
+  imageViewInfo.subresourceRange.levelCount     = 1;
+  imageViewInfo.image                           = (*a_image);
+    
+  VK_CHECK_RESULT(vkCreateImageView(a_device, &imageViewInfo, nullptr, a_imageView));
 }

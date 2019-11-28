@@ -58,7 +58,10 @@ namespace vk_utils
 
   void CreateScreenImageViews(VkDevice a_device, ScreenBufferResources* pScreen);
 
-  void CreateScreenFrameBuffers(VkDevice a_device, VkRenderPass a_renderPass, ScreenBufferResources* pScreen);
+  void CreateScreenFrameBuffers(VkDevice a_device, VkRenderPass a_renderPass, VkImageView a_depthView, ScreenBufferResources* pScreen);
+
+  void CreateDepthTexture(VkDevice a_device, VkPhysicalDevice a_physDevice, const int a_width, const int a_height,
+                          VkDeviceMemory *a_pImageMemory, VkImage *a_image, VkImageView* a_imageView);
 
   std::vector<uint32_t> ReadFile(const char* filename);
   VkShaderModule CreateShaderModule(VkDevice a_device, const std::vector<uint32_t>& code);
