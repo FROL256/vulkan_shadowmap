@@ -498,19 +498,6 @@ private:
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkSubpassDescription subpass  = {};
-    subpass.pipelineBindPoint     = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount  = 1;
-    subpass.pColorAttachments     = &colorAttachmentRef;
-
-    VkSubpassDependency dependency = {};
-    dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass    = 0;
-    dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
     // add depth test
     //
     VkAttachmentDescription depthAttachment = {};
@@ -526,6 +513,21 @@ private:
     VkAttachmentReference depthAttachmentRef = {};
     depthAttachmentRef.attachment = 1;
     depthAttachmentRef.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass    = {};
+    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount    = 1;
+    subpass.pColorAttachments       = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+    VkSubpassDependency dependency = {};
+    dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass    = 0;
+    dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+   
 
     std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};  
   
@@ -642,6 +644,9 @@ private:
     depthStencilTest.depthCompareOp        = VK_COMPARE_OP_LESS;
     depthStencilTest.depthBoundsTestEnable = false;
     depthStencilTest.stencilTestEnable     = false;
+    depthStencilTest.depthBoundsTestEnable = VK_FALSE;
+    depthStencilTest.minDepthBounds        = 0.0f; // Optional
+    depthStencilTest.maxDepthBounds        = 1.0f; // Optional
 
     assert(m_pTerrainMesh != nullptr);
     auto vertexInputInfo = m_pTerrainMesh->VertexInputLayout();
@@ -691,9 +696,11 @@ private:
       renderPassInfo.renderArea.offset = { 0, 0 };
       renderPassInfo.renderArea.extent = a_frameBufferExtent;
 
-      VkClearValue clearColor[2]     = { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
-      renderPassInfo.clearValueCount = 2;
-      renderPassInfo.pClearValues    = &clearColor[0];
+      std::array<VkClearValue, 2> clearValues = {};
+      clearValues[0].color           = {0.0f, 0.0f, 0.0f, 1.0f};
+      clearValues[1].depthStencil    = {1.0f, 0};
+      renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+      renderPassInfo.pClearValues    = clearValues.data();
 
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
