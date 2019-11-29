@@ -816,39 +816,6 @@ private:
 
     if (vkBeginCommandBuffer(a_cmdBuff, &beginInfo) != VK_SUCCESS) 
       throw std::runtime_error("[WriteCommandBuffer]: failed to begin recording command buffer!");
-    
-    // #TODO: please refector this shit!
-    //////////////////////////////////////////////////////////////////////////////////////////////
-    {
-      VkImageMemoryBarrier imgBar = {}; 
-      {
-        imgBar.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        imgBar.pNext = nullptr;
-        imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imgBar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        imgBar.srcAccessMask = 0;
-        imgBar.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        imgBar.oldLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
-        imgBar.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imgBar.image         = m_pTex1->Image();
-
-        imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-        imgBar.subresourceRange.baseMipLevel   = 0;
-        imgBar.subresourceRange.levelCount     = 1;
-        imgBar.subresourceRange.baseArrayLayer = 0;
-        imgBar.subresourceRange.layerCount     = 1;
-      };
-
-      vkCmdPipelineBarrier(a_cmdBuff,
-                           VK_PIPELINE_STAGE_TRANSFER_BIT,
-                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                           0,
-                           0, nullptr,
-                           0, nullptr,
-                           1, &imgBar);
-    }
-    //////////////////////////////////////////////////////////////////////////////////////////////
 
     ///// 
     {
