@@ -217,22 +217,19 @@ VkPhysicalDevice vk_utils::FindPhysicalDevice(VkInstance a_instance, bool a_prin
     vkGetPhysicalDeviceProperties(devices[i], &props);
     vkGetPhysicalDeviceFeatures(devices[i], &features);
 
-    if(a_printInfo)
-      std::cout << "  device " << i << ", name = " << props.deviceName << std::endl;
+    if (a_printInfo)
+      std::cout << "  device " << i << ", name = " << props.deviceName;
 
-    if(i == a_preferredDeviceId)
+    if (i == a_preferredDeviceId) // && isDeviceSuitable(device)
+    {
       physicalDevice = devices[i];
+      std::cout << " <-- (selected)" << std::endl;
+    }
+
+    std::cout << std::endl;
   }
   if(a_printInfo)
     std::cout << "}" << std::endl;
-
-  //for (const auto& device : devices) {
-  //  if (isDeviceSuitable(device)) {
-  //    physicalDevice = device;
-  //    break;
-  //  }
-  //}
-
 
   // try to select some device if preferred was not selected
   //

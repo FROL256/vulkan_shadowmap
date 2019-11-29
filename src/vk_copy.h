@@ -16,6 +16,7 @@ namespace vk_copy
     ~SimpleCopyHelper();
 
     void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size);
+    void UpdateImage(VkImage a_image, unsigned int* a_src, int a_width, int a_height);
 
   private:
 

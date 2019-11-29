@@ -11,7 +11,6 @@ layout(push_constant) uniform params_t
 
 } params;
 
-
 vec3 DecodeNormal(uint a_data)
 {  
   const uint a_enc_x = (a_data  & 0x0000FFFF);
@@ -37,7 +36,6 @@ layout (location = 0 ) out VS_OUT
   vec3 wNorm;
   vec3 wTangent;
   vec2 texCoord;
-  vec3 testColor;
 
 } vOut;
 
@@ -47,7 +45,6 @@ void main(void)
   vOut.wNorm     = DecodeNormal(floatBitsToInt(vPosNorm.w));
   vOut.wTangent  = DecodeNormal(floatBitsToInt(vTexCoordAndTang.z));
   vOut.texCoord  = vTexCoordAndTang.xy;
-  vOut.testColor = vec3(0,0,1);
 
   const vec4 posCamSpace = params.mWorldView*vec4(vOut.wPos, 1.0);
 

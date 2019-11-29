@@ -139,3 +139,69 @@ void vk_copy::SimpleCopyHelper::UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset,
 
   vk_utils::ExecuteCommandBufferNow(cmdBuff, queue, dev);
 }
+
+void vk_copy::SimpleCopyHelper::UpdateImage(VkImage a_image, unsigned int* a_src, int a_width, int a_height)
+{
+  size_t a_size = a_width * a_height * sizeof(unsigned int);
+
+  void* mappedMemory = nullptr;
+  vkMapMemory(dev, stagingBuffMemory, 0, a_size, 0, &mappedMemory);
+  memcpy(mappedMemory, a_src, a_size);
+  vkUnmapMemory(dev, stagingBuffMemory);
+
+
+  VkCommandBufferBeginInfo beginInfo = {};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+  vkResetCommandBuffer(cmdBuff, 0);
+  vkBeginCommandBuffer(cmdBuff, &beginInfo);
+
+  VkImageMemoryBarrier imgBar = {};
+  {
+    imgBar.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imgBar.pNext = nullptr;
+    imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imgBar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+    imgBar.srcAccessMask = 0;
+    imgBar.dstAccessMask = 0;
+    imgBar.oldLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
+    imgBar.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    imgBar.image         = a_image;
+
+    imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    imgBar.subresourceRange.baseMipLevel   = 0;
+    imgBar.subresourceRange.levelCount     = 1;
+    imgBar.subresourceRange.baseArrayLayer = 0;
+    imgBar.subresourceRange.layerCount     = 1;
+  };
+
+  vkCmdPipelineBarrier(cmdBuff,
+                       VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       0,
+                       0, nullptr,
+                       0, nullptr,
+                       1, &imgBar);
+
+
+  VkImageSubresourceLayers shittylayers = {};
+  shittylayers.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+  shittylayers.mipLevel       = 0;
+  shittylayers.baseArrayLayer = 0;
+  shittylayers.layerCount     = 1;
+
+  VkBufferImageCopy wholeRegion = {};
+  wholeRegion.bufferOffset      = 0;
+  wholeRegion.bufferRowLength   = uint32_t(a_width);
+  wholeRegion.bufferImageHeight = uint32_t(a_height);
+  wholeRegion.imageExtent       = VkExtent3D{ uint32_t(a_width), uint32_t(a_height), 1 };
+  wholeRegion.imageOffset       = VkOffset3D{ 0,0,0 };
+  wholeRegion.imageSubresource  = shittylayers;
+
+  vkCmdCopyBufferToImage(cmdBuff, stagingBuff, a_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &wholeRegion);
+
+  vkEndCommandBuffer(cmdBuff);
+
+  vk_utils::ExecuteCommandBufferNow(cmdBuff, queue, dev);
+}

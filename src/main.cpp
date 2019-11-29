@@ -22,6 +22,8 @@
 #include "vk_utils.h"
 #include "vk_geom.h"
 #include "vk_copy.h"
+#include "vk_texture.h"
+#include "Bitmap.h"
 
 #include "Camera.h"
 
@@ -164,7 +166,17 @@ private:
   VkCommandPool                commandPool;
   std::vector<VkCommandBuffer> commandBuffers;
 
-  VkDeviceMemory               m_memAllMeshes = nullptr; //
+  // Descriptors represent resources in shaders. They allow us to use things like
+  // uniform buffers, storage buffers and images in GLSL.
+  // A single descriptor represents a single resource, and several descriptors are organized
+  // into descriptor sets, which are basically just collections of descriptors.
+  // 
+  VkDescriptorPool      descriptorPool      = nullptr;
+  VkDescriptorSet       descriptorSet       = nullptr;
+  VkDescriptorSetLayout descriptorSetLayout = nullptr;
+
+  VkDeviceMemory        m_memAllMeshes   = nullptr; //
+  VkDeviceMemory        m_memAllTextures = nullptr;
 
   struct SyncObj
   {
@@ -183,7 +195,6 @@ private:
   
     void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) override { m_helper.UpdateBuffer(a_dst, a_dstOffset, a_src, a_size); }
   
-  private:
     vk_copy::SimpleCopyHelper m_helper;
   };
 
@@ -192,6 +203,9 @@ private:
   std::shared_ptr<vk_geom::IMesh> m_pTerrainMesh;
   std::shared_ptr<vk_geom::IMesh> m_pTeapotMesh;
   std::shared_ptr<vk_geom::IMesh> m_pLucyMesh;
+
+  std::shared_ptr<vk_texture::SimpleVulkanTexture> m_pTex1;
+
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -274,7 +288,7 @@ private:
 
   void InitVulkan() 
   {
-    const int deviceId = 0;
+    const int deviceId = 1;
 
     std::vector<const char*> extensions;
     {
@@ -340,6 +354,36 @@ private:
   
     CreateSyncObjects(device, &m_sync);
 
+    CreateDescriptorSetLayout(device, &descriptorSetLayout);
+
+    // create textures
+    //
+    int  w1, h1;
+    auto data1 = LoadBMP("data/texture1.bmp", &w1, &h1);
+    m_pTex1    = std::make_shared<vk_texture::SimpleVulkanTexture>();
+
+    auto memReqTex1 = m_pTex1->CreateR8G8B8A8(device, w1, h1);
+
+    {
+      VkMemoryAllocateInfo allocateInfo = {};
+      allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocateInfo.pNext           = nullptr;
+      allocateInfo.allocationSize  = memReqTex1.size;
+      allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReqTex1.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice);
+
+      VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllTextures));
+    }
+
+    m_pTex1->BindMemory(m_memAllTextures, 0);
+
+    auto sampler = m_pTex1->Sampler();
+    auto view    = m_pTex1->View();
+
+    CreateDescriptorSetForImages(device, &descriptorSetLayout, &sampler, &view, 1,
+                                 &descriptorPool, &descriptorSet);
+
+    m_pCopyHelper->m_helper.UpdateImage(m_pTex1->Image(), data1.data(), w1, h1);
+
 
     // create meshes
     //
@@ -354,9 +398,9 @@ private:
     if(teapData.VerticesNum() == 0)
       RUN_TIME_ERROR("can't load mesh at 'data/teapot.vsgf'");
 
-    auto memReq1 = m_pTerrainMesh->CreateBuffers(device, meshData.VerticesNum(), meshData.IndicesNum()); // what if memReq1 and memReq2 differs in memoryTypeBits ... ? )
-    auto memReq2 = m_pTeapotMesh->CreateBuffers (device, teapData.VerticesNum(), teapData.IndicesNum()); //
-    auto memReq3 = m_pLucyMesh->CreateBuffers   (device, lucyData.VerticesNum(), lucyData.IndicesNum()); //
+    auto memReq1 = m_pTerrainMesh->CreateBuffers(device, int(meshData.VerticesNum()), int(meshData.IndicesNum())); // what if memReq1 and memReq2 differs in memoryTypeBits ... ? )
+    auto memReq2 = m_pTeapotMesh->CreateBuffers (device, int(teapData.VerticesNum()), int(teapData.IndicesNum())); //
+    auto memReq3 = m_pLucyMesh->CreateBuffers   (device, int(lucyData.VerticesNum()), int(lucyData.IndicesNum())); //
 
     assert(memReq1.memoryTypeBits == memReq2.memoryTypeBits); // assume this in our simple demo
     assert(memReq1.memoryTypeBits == memReq3.memoryTypeBits); // assume this in our simple demo
@@ -425,6 +469,9 @@ private:
 
   void Cleanup() 
   { 
+
+    m_pTex1 = nullptr;        // smart pointer will destroy resources
+
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
     m_pTeapotMesh  = nullptr;
@@ -433,12 +480,21 @@ private:
     // free our vbos
     vkFreeMemory(device, m_memAllMeshes, NULL);
 
+    if(m_memAllTextures != nullptr)
+      vkFreeMemory(device, m_memAllTextures, NULL);
+
     if(depthImageMemory != nullptr)
     {
       vkFreeMemory      (device, depthImageMemory, NULL);
       vkDestroyImageView(device, depthImageView, NULL);
       vkDestroyImage    (device, depthImage, NULL);
     }
+
+    if (descriptorPool != nullptr)
+      vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+
+    if(descriptorSetLayout != nullptr)
+      vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
 
     if (enableValidationLayers)
     {
@@ -480,6 +536,81 @@ private:
 
     glfwTerminate();
   }
+
+  static void CreateDescriptorSetLayout(VkDevice a_device, VkDescriptorSetLayout *a_pDSLayout)
+  {
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[1];
+  
+    descriptorSetLayoutBinding[0].binding            = 0;
+    descriptorSetLayoutBinding[0].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorSetLayoutBinding[0].descriptorCount    = 1;
+    descriptorSetLayoutBinding[0].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+    descriptorSetLayoutBinding[0].pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+    descriptorSetLayoutCreateInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutCreateInfo.bindingCount = 1;
+    descriptorSetLayoutCreateInfo.pBindings    = descriptorSetLayoutBinding;
+
+    // Create the descriptor set layout.
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, a_pDSLayout));
+  }
+
+  void CreateDescriptorSetForImages(VkDevice a_device, const VkDescriptorSetLayout *a_pDSLayout, VkSampler* a_samplers, VkImageView *a_views, int a_imagesNumber,
+                                    VkDescriptorPool* a_pDSPool, VkDescriptorSet* a_pDS)
+  {
+    assert(a_pDSLayout != nullptr);
+    assert(a_pDSPool   != nullptr);
+    assert(a_pDS       != nullptr);
+
+    assert(a_samplers != nullptr);
+    assert(a_views    != nullptr);
+    assert(a_imagesNumber != 0);
+
+    VkDescriptorPoolSize descriptorPoolSize[2];
+    descriptorPoolSize[0].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorPoolSize[0].descriptorCount = 1;
+    descriptorPoolSize[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorPoolSize[1].descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
+    descriptorPoolCreateInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolCreateInfo.maxSets       = 1; // we need to allocate at least 1 descriptor set
+    descriptorPoolCreateInfo.poolSizeCount = 2;
+    descriptorPoolCreateInfo.pPoolSizes    = descriptorPoolSize;
+
+    VK_CHECK_RESULT(vkCreateDescriptorPool(a_device, &descriptorPoolCreateInfo, NULL, a_pDSPool));
+
+    // With the pool allocated, we can now allocate the descriptor set.
+    //
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+    descriptorSetAllocateInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAllocateInfo.descriptorPool     = (*a_pDSPool); // pool to allocate from.
+    descriptorSetAllocateInfo.descriptorSetCount = 1;            // allocate a descriptor set for buffer and image
+    descriptorSetAllocateInfo.pSetLayouts        = a_pDSLayout;
+
+    // allocate descriptor set.
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(a_device, &descriptorSetAllocateInfo, a_pDS));
+
+    // Next, we need to connect our actual storage buffer with the descriptor.
+    // We use vkUpdateDescriptorSets() to update the descriptor set.
+    //
+    VkDescriptorImageInfo descriptorImageInfo = {};
+    descriptorImageInfo.sampler     = a_samplers[0];
+    descriptorImageInfo.imageView   = a_views   [0];
+    descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet writeDescriptorSet2 = {};
+    writeDescriptorSet2.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet2.dstSet          = *(a_pDS);     // write to first descriptor.
+    writeDescriptorSet2.dstBinding      = 0;            // second binding
+    writeDescriptorSet2.descriptorCount = 1;            // update a single descriptor.
+    writeDescriptorSet2.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // image.
+    writeDescriptorSet2.pImageInfo      = &descriptorImageInfo;
+
+    vkUpdateDescriptorSets(a_device, 1, &writeDescriptorSet2, 0, NULL);
+  }
+
 
   static void CreateRenderPass(VkDevice a_device, VkFormat a_swapChainImageFormat, 
                                VkRenderPass* a_pRenderPass)
@@ -528,13 +659,11 @@ private:
     dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
    
-
-    std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};  
-  
-    VkRenderPassCreateInfo renderPassInfo = {};
+    VkAttachmentDescription attachments[2] = {colorAttachment, depthAttachment};
+    VkRenderPassCreateInfo renderPassInfo  = {};
     renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = 2;
-    renderPassInfo.pAttachments    = attachments.data();
+    renderPassInfo.pAttachments    = &attachments[0];
     renderPassInfo.subpassCount    = 1;
     renderPassInfo.pSubpasses      = &subpass;
     renderPassInfo.dependencyCount = 1;
@@ -629,10 +758,11 @@ private:
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount         = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
+    pipelineLayoutInfo.pSetLayouts            = &descriptorSetLayout;
+    pipelineLayoutInfo.setLayoutCount         = 1;
 
     if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
@@ -687,6 +817,39 @@ private:
     if (vkBeginCommandBuffer(a_cmdBuff, &beginInfo) != VK_SUCCESS) 
       throw std::runtime_error("[WriteCommandBuffer]: failed to begin recording command buffer!");
     
+    // #TODO: please refector this shit!
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    {
+      VkImageMemoryBarrier imgBar = {}; 
+      {
+        imgBar.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        imgBar.pNext = nullptr;
+        imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        imgBar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+        imgBar.srcAccessMask = 0;
+        imgBar.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        imgBar.oldLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
+        imgBar.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imgBar.image         = m_pTex1->Image();
+
+        imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+        imgBar.subresourceRange.baseMipLevel   = 0;
+        imgBar.subresourceRange.levelCount     = 1;
+        imgBar.subresourceRange.baseArrayLayer = 0;
+        imgBar.subresourceRange.layerCount     = 1;
+      };
+
+      vkCmdPipelineBarrier(a_cmdBuff,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                           0,
+                           0, nullptr,
+                           0, nullptr,
+                           1, &imgBar);
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////
+
     ///// 
     {
       VkRenderPassBeginInfo renderPassInfo = {};
@@ -696,15 +859,16 @@ private:
       renderPassInfo.renderArea.offset = { 0, 0 };
       renderPassInfo.renderArea.extent = a_frameBufferExtent;
 
-      std::array<VkClearValue, 2> clearValues = {};
+      VkClearValue clearValues[2] = {};
       clearValues[0].color           = {0.0f, 0.0f, 0.0f, 1.0f};
       clearValues[1].depthStencil    = {1.0f, 0};
-      renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-      renderPassInfo.pClearValues    = clearValues.data();
+      renderPassInfo.clearValueCount = 2;
+      renderPassInfo.pClearValues    = &clearValues[0];
 
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
+      vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, &descriptorSet, 0, NULL);
 
       const float aspect   = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
       auto mProjTransposed = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);

@@ -14,11 +14,10 @@
 
 #include "cmesh.h"
 
-#include "vk_utils.h" // #TODO: remome this!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 namespace vk_geom
 {
-  // Anapplication should implement this interface
+  // Application should implement this interface
   //
   struct ICopyEngine
   {
