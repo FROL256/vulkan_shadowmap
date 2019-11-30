@@ -172,7 +172,7 @@ private:
   // into descriptor sets, which are basically just collections of descriptors.
   // 
   VkDescriptorPool      descriptorPool      = nullptr;
-  VkDescriptorSet       descriptorSet       = nullptr;
+  VkDescriptorSet       descriptorSet[3]    = {}; // for our textures
   VkDescriptorSetLayout descriptorSetLayout = nullptr;
 
   VkDeviceMemory        m_memAllMeshes   = nullptr; //
@@ -204,7 +204,7 @@ private:
   std::shared_ptr<vk_geom::IMesh> m_pTeapotMesh;
   std::shared_ptr<vk_geom::IMesh> m_pLucyMesh;
 
-  std::shared_ptr<vk_texture::SimpleVulkanTexture> m_pTex1;
+  std::shared_ptr<vk_texture::SimpleVulkanTexture> m_pTex1, m_pTex2;
 
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -358,31 +358,39 @@ private:
 
     // create textures
     //
-    int  w1, h1;
+    int  w1, h1, w2, h2;
     auto data1 = LoadBMP("data/texture1.bmp", &w1, &h1);
-    m_pTex1    = std::make_shared<vk_texture::SimpleVulkanTexture>();
+    auto data2 = LoadBMP("data/stonebrick.bmp", &w2, &h2);
 
+    m_pTex1    = std::make_shared<vk_texture::SimpleVulkanTexture>();
+    m_pTex2    = std::make_shared<vk_texture::SimpleVulkanTexture>();
+    
     auto memReqTex1 = m_pTex1->CreateR8G8B8A8(device, w1, h1);
+    auto memReqTex2 = m_pTex2->CreateR8G8B8A8(device, w2, h2);
+
+    assert(memReqTex1.memoryTypeBits == memReqTex2.memoryTypeBits);
 
     {
       VkMemoryAllocateInfo allocateInfo = {};
       allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
       allocateInfo.pNext           = nullptr;
-      allocateInfo.allocationSize  = memReqTex1.size;
+      allocateInfo.allocationSize  = memReqTex1.size + memReqTex2.size;
       allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReqTex1.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice);
 
       VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllTextures));
     }
 
     m_pTex1->BindMemory(m_memAllTextures, 0);
+    m_pTex2->BindMemory(m_memAllTextures, memReqTex1.size);
+    
+    VkSampler samplers[] = {m_pTex1->Sampler(), m_pTex2->Sampler()};
+    VkImageView views [] = {m_pTex1->View(), m_pTex2->View()};
 
-    auto sampler = m_pTex1->Sampler();
-    auto view    = m_pTex1->View();
-
-    CreateDescriptorSetForImages(device, &descriptorSetLayout, &sampler, &view, 1,
-                                 &descriptorPool, &descriptorSet);
+    CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, 2,
+                                 &descriptorPool, descriptorSet);
 
     m_pCopyHelper->m_helper.UpdateImage(m_pTex1->Image(), data1.data(), w1, h1);
+    m_pCopyHelper->m_helper.UpdateImage(m_pTex2->Image(), data2.data(), w2, h2);
 
 
     // create meshes
@@ -471,6 +479,7 @@ private:
   { 
 
     m_pTex1 = nullptr;        // smart pointer will destroy resources
+    m_pTex2 = nullptr;
 
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
@@ -556,10 +565,9 @@ private:
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, a_pDSLayout));
   }
 
-  void CreateDescriptorSetForImages(VkDevice a_device, const VkDescriptorSetLayout *a_pDSLayout, VkSampler* a_samplers, VkImageView *a_views, int a_imagesNumber,
-                                    VkDescriptorPool* a_pDSPool, VkDescriptorSet* a_pDS)
+  void CreateDescriptorSetsForImages(VkDevice a_device, const VkDescriptorSetLayout a_dsLayout, VkSampler* a_samplers, VkImageView *a_views, int a_imagesNumber,
+                                     VkDescriptorPool* a_pDSPool, VkDescriptorSet* a_pDS)
   {
-    assert(a_pDSLayout != nullptr);
     assert(a_pDSPool   != nullptr);
     assert(a_pDS       != nullptr);
 
@@ -575,7 +583,7 @@ private:
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
     descriptorPoolCreateInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.maxSets       = 1; // we need to allocate at least 1 descriptor set
+    descriptorPoolCreateInfo.maxSets       = a_imagesNumber; // we need to allocate at least 1 descriptor set
     descriptorPoolCreateInfo.poolSizeCount = 2;
     descriptorPoolCreateInfo.pPoolSizes    = descriptorPoolSize;
 
@@ -583,32 +591,39 @@ private:
 
     // With the pool allocated, we can now allocate the descriptor set.
     //
+    std::vector<VkDescriptorSetLayout> layouts(a_imagesNumber);
+    for(int i=0;i<layouts.size();i++)
+      layouts[i] = a_dsLayout;
+
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
     descriptorSetAllocateInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool     = (*a_pDSPool); // pool to allocate from.
-    descriptorSetAllocateInfo.descriptorSetCount = 1;            // allocate a descriptor set for buffer and image
-    descriptorSetAllocateInfo.pSetLayouts        = a_pDSLayout;
+    descriptorSetAllocateInfo.descriptorPool     = (*a_pDSPool);   // pool to allocate from.
+    descriptorSetAllocateInfo.descriptorSetCount = a_imagesNumber; // allocate a descriptor set for buffer and image
+    descriptorSetAllocateInfo.pSetLayouts        = layouts.data();
 
     // allocate descriptor set.
     VK_CHECK_RESULT(vkAllocateDescriptorSets(a_device, &descriptorSetAllocateInfo, a_pDS));
 
-    // Next, we need to connect our actual storage buffer with the descriptor.
+    // Next, we need to connect our actual texture with the descriptor.
     // We use vkUpdateDescriptorSets() to update the descriptor set.
     //
-    VkDescriptorImageInfo descriptorImageInfo = {};
-    descriptorImageInfo.sampler     = a_samplers[0];
-    descriptorImageInfo.imageView   = a_views   [0];
-    descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    for(int imageId = 0; imageId < a_imagesNumber; imageId++)
+    {
+      VkDescriptorImageInfo descriptorImageInfo = {};
+      descriptorImageInfo.sampler     = a_samplers[imageId];
+      descriptorImageInfo.imageView   = a_views   [imageId];
+      descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkWriteDescriptorSet writeDescriptorSet2 = {};
-    writeDescriptorSet2.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet2.dstSet          = *(a_pDS);     // write to first descriptor.
-    writeDescriptorSet2.dstBinding      = 0;            // second binding
-    writeDescriptorSet2.descriptorCount = 1;            // update a single descriptor.
-    writeDescriptorSet2.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // image.
-    writeDescriptorSet2.pImageInfo      = &descriptorImageInfo;
+      VkWriteDescriptorSet writeDescriptorSet2 = {};
+      writeDescriptorSet2.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      writeDescriptorSet2.dstSet          = a_pDS[imageId]; 
+      writeDescriptorSet2.dstBinding      = 0;              
+      writeDescriptorSet2.descriptorCount = 1;              
+      writeDescriptorSet2.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // image.
+      writeDescriptorSet2.pImageInfo      = &descriptorImageInfo;
 
-    vkUpdateDescriptorSets(a_device, 1, &writeDescriptorSet2, 0, NULL);
+      vkUpdateDescriptorSets(a_device, 1, &writeDescriptorSet2, 0, NULL);
+    }
   }
 
 
@@ -835,7 +850,7 @@ private:
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
       vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, &descriptorSet, 0, NULL);
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+1, 0, NULL);
 
       const float aspect   = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
       auto mProjTransposed = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
@@ -851,6 +866,8 @@ private:
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
       m_pTerrainMesh->DrawCmd(a_cmdBuff);
       
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet, 0, NULL);
+
       // draw teapot
       {
         auto mtranslate = LiteMath::translate4x4({-0.85f, 0.4f, 0.0f});
