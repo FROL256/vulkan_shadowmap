@@ -19,6 +19,8 @@ namespace vk_texture
     VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
     void                 BindMemory (VkDeviceMemory a_memStorage, size_t a_offset);
 
+    void                 GenerateMips(VkCommandBuffer a_cmdBuff, VkQueue a_queue);
+
     VkImage              Image()   const { return imageGPU; }
     VkImageView          View()    const { return imageView; }
     VkSampler            Sampler() const { return imageSampler; }
@@ -33,6 +35,8 @@ namespace vk_texture
     VkImageView    imageView;
     VkDevice       m_device;
     VkFormat       m_format;
+    int m_width, m_height;
+    int m_mipLevels;
   };
 };
 

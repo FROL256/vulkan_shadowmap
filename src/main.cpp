@@ -397,7 +397,40 @@ private:
     m_pCopyHelper->m_helper.UpdateImage(m_pTex1->Image(), data1.data(), w1, h1, sizeof(int));
     m_pCopyHelper->m_helper.UpdateImage(m_pTex2->Image(), data2.data(), w2, h2, sizeof(int));
     m_pCopyHelper->m_helper.UpdateImage(m_pTex3->Image(), data3.data(), w3, h3, sizeof(int));
+    
+    // generate all mips
+    //
+    {
+      VkCommandBuffer cmdBuff = nullptr;
+      {
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.pNext              = nullptr;
+        allocInfo.commandPool        = commandPool;
+        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+        
+        if (vkAllocateCommandBuffers(device, &allocInfo, &cmdBuff) != VK_SUCCESS)
+          throw std::runtime_error("[FFF]: failed to allocate command buffer!");
+      }
 
+      VkCommandBufferBeginInfo beginInfo = {};
+      beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+      beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+      if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
+         throw std::runtime_error("[FFF]: failed to begin command buffer!");
+      
+      m_pTex1->GenerateMips(cmdBuff, transferQueue);
+      m_pTex2->GenerateMips(cmdBuff, transferQueue);
+      m_pTex3->GenerateMips(cmdBuff, transferQueue);
+     
+      vkEndCommandBuffer(cmdBuff);
+
+      vk_utils::ExecuteCommandBufferNow(cmdBuff, transferQueue, device);
+
+      vkFreeCommandBuffers(device, commandPool, 1, &cmdBuff);
+    }
 
     // create meshes
     //
