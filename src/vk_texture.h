@@ -16,9 +16,8 @@ namespace vk_texture
     SimpleVulkanTexture() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
     ~SimpleVulkanTexture();
    
-    VkMemoryRequirements CreateR8G8B8A8(VkDevice a_device, const int a_width, const int a_height);
-    void                 BindMemory    (VkDeviceMemory a_memStorage, size_t a_offset);
-    void                 UpdateNow     (const unsigned int* a_data, const int a_width, const int a_height);
+    VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
+    void                 BindMemory (VkDeviceMemory a_memStorage, size_t a_offset);
 
     VkImage              Image()   const { return imageGPU; }
     VkImageView          View()    const { return imageView; }
@@ -28,11 +27,12 @@ namespace vk_texture
 
     void CreateOther();
 
-    VkDeviceMemory memStorage; // this is bad design in fact, you should store memory somewhere else and/or use memory pools;
+    VkDeviceMemory memStorage; // SimpleVulkanTexture DOES NOT OWN memStorage! It just save reference to it.
     VkImage        imageGPU;
     VkSampler      imageSampler;
     VkImageView    imageView;
     VkDevice       m_device;
+    VkFormat       m_format;
   };
 };
 

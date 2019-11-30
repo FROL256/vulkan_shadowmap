@@ -140,9 +140,9 @@ void vk_copy::SimpleCopyHelper::UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset,
   vk_utils::ExecuteCommandBufferNow(cmdBuff, queue, dev);
 }
 
-void vk_copy::SimpleCopyHelper::UpdateImage(VkImage a_image, unsigned int* a_src, int a_width, int a_height)
+void vk_copy::SimpleCopyHelper::UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp)
 {
-  size_t a_size = a_width * a_height * sizeof(unsigned int);
+  size_t a_size = a_width * a_height * a_bpp;
 
   void* mappedMemory = nullptr;
   vkMapMemory(dev, stagingBuffMemory, 0, a_size, 0, &mappedMemory);
@@ -213,11 +213,11 @@ void vk_copy::SimpleCopyHelper::UpdateImage(VkImage a_image, unsigned int* a_src
   imgBar.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   imgBar.image         = a_image;
 
-  imgBar.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  imgBar.subresourceRange.baseMipLevel = 0;
-  imgBar.subresourceRange.levelCount = 1;
+  imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+  imgBar.subresourceRange.baseMipLevel   = 0;
+  imgBar.subresourceRange.levelCount     = 1;
   imgBar.subresourceRange.baseArrayLayer = 0;
-  imgBar.subresourceRange.layerCount = 1;
+  imgBar.subresourceRange.layerCount     = 1;
  
   vkCmdPipelineBarrier(cmdBuff,
                        VK_PIPELINE_STAGE_TRANSFER_BIT,

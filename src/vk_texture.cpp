@@ -12,16 +12,17 @@ vk_texture::SimpleVulkanTexture::~SimpleVulkanTexture()
   vkDestroySampler  (m_device, imageSampler, NULL); imageSampler = nullptr;
 }
 
-VkMemoryRequirements vk_texture::SimpleVulkanTexture::CreateR8G8B8A8(VkDevice a_device, const int a_width, const int a_height)
+VkMemoryRequirements vk_texture::SimpleVulkanTexture::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
 {
   m_device = a_device;
+  m_format = a_format;
 
   VkImageCreateInfo imgCreateInfo = {};
   imgCreateInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   imgCreateInfo.pNext         = nullptr;
   imgCreateInfo.flags         = 0; // not sure about this ...
   imgCreateInfo.imageType     = VK_IMAGE_TYPE_2D;
-  imgCreateInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+  imgCreateInfo.format        = a_format;
   imgCreateInfo.extent        = VkExtent3D{ uint32_t(a_width), uint32_t(a_height), 1 };
   imgCreateInfo.mipLevels     = 1;
   imgCreateInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
@@ -75,7 +76,7 @@ void vk_texture::SimpleVulkanTexture::BindMemory(VkDeviceMemory a_memStorage, si
     imageViewInfo.sType      = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     imageViewInfo.flags      = 0;
     imageViewInfo.viewType   = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewInfo.format     = VK_FORMAT_R8G8B8A8_UNORM;
+    imageViewInfo.format     = m_format;
     imageViewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
     // The subresource range describes the set of mip levels (and array layers) that can be accessed through this image view
     // It's possible to create multiple image views for a single image referring to different (and/or overlapping) ranges of the image
@@ -117,9 +118,3 @@ void vk_texture::SimpleVulkanTexture::CreateOther()
  
 }
 
-
-
-void  vk_texture::SimpleVulkanTexture::UpdateNow(const unsigned int* a_data, const int a_width, const int a_height)
-{
-
-}
