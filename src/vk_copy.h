@@ -18,6 +18,8 @@ namespace vk_copy
     void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size);
     void UpdateImage (VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp);
 
+    VkCommandBuffer CmdBuffer() { return cmdBuff; }
+
   private:
 
     VkQueue         queue;

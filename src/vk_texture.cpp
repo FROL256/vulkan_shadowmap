@@ -2,6 +2,7 @@
 #include "vk_utils.h"
 #include <cassert>
 #include <cmath>
+#include <algorithm>
 
 #ifdef WIN32
 #undef max
@@ -25,7 +26,7 @@ VkMemoryRequirements vk_texture::SimpleVulkanTexture::CreateImage(VkDevice a_dev
   m_height = a_height;
   m_format = a_format;
 
-  m_mipLevels = floor(log2(std::max(m_width, m_height))) + 1;
+  m_mipLevels = int(floor(log2(std::max(m_width, m_height))) + 1);
 
   VkImageCreateInfo imgCreateInfo = {};
   imgCreateInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -61,7 +62,7 @@ VkMemoryRequirements vk_texture::SimpleVulkanTexture::CreateImage(VkDevice a_dev
     samplerInfo.mipLodBias       = 0.0f;
     samplerInfo.compareOp        = VK_COMPARE_OP_NEVER;
     samplerInfo.minLod           = 0;
-    samplerInfo.maxLod           = m_mipLevels-1;
+    samplerInfo.maxLod           = float(m_mipLevels);
     samplerInfo.maxAnisotropy    = 1.0;
     samplerInfo.anisotropyEnable = VK_FALSE;
     samplerInfo.borderColor      = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
@@ -255,7 +256,7 @@ namespace vk_utils
     }
 };
 
-void vk_texture::SimpleVulkanTexture::GenerateMips(VkCommandBuffer a_cmdBuff, VkQueue a_queue)
+void vk_texture::SimpleVulkanTexture::GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a_queue)
 {
   VkCommandBuffer blitCmd   = a_cmdBuff;
   VkQueue         copyQueue = a_queue;
@@ -271,7 +272,7 @@ void vk_texture::SimpleVulkanTexture::GenerateMips(VkCommandBuffer a_cmdBuff, Vk
     
     imgBar.srcAccessMask = 0;
     imgBar.dstAccessMask = 0;
-    imgBar.oldLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imgBar.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     imgBar.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     imgBar.image         = imageGPU;
   
@@ -282,7 +283,7 @@ void vk_texture::SimpleVulkanTexture::GenerateMips(VkCommandBuffer a_cmdBuff, Vk
     imgBar.subresourceRange.layerCount     = 1;
   
     vkCmdPipelineBarrier(blitCmd,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_TRANSFER_BIT,
                          0,
                          0, nullptr,

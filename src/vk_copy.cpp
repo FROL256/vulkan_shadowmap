@@ -201,7 +201,7 @@ void vk_copy::SimpleCopyHelper::UpdateImage(VkImage a_image, const void* a_src, 
 
   vkCmdCopyBufferToImage(cmdBuff, stagingBuff, a_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &wholeRegion);
 
-  
+  /*
   imgBar.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   imgBar.pNext = nullptr;
   imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -225,8 +225,8 @@ void vk_copy::SimpleCopyHelper::UpdateImage(VkImage a_image, const void* a_src, 
                        0,
                        0, nullptr,
                        0, nullptr,
-                       1, &imgBar);
-
+                       1, &imgBar);  
+  */
   vkEndCommandBuffer(cmdBuff);
 
   vk_utils::ExecuteCommandBufferNow(cmdBuff, queue, dev);

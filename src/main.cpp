@@ -194,7 +194,10 @@ private:
     CopyEngine(VkPhysicalDevice a_physicalDevice, VkDevice a_device, VkQueue a_transferQueue, size_t a_stagingBuffSize) : m_helper(a_physicalDevice, a_device, a_transferQueue, a_stagingBuffSize) {}
   
     void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) override { m_helper.UpdateBuffer(a_dst, a_dstOffset, a_src, a_size); }
-  
+    void UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp)       { m_helper.UpdateImage(a_image, a_src, a_width, a_height, a_bpp); }
+
+    VkCommandBuffer CmdBuffer() { return m_helper.CmdBuffer(); }
+
     vk_copy::SimpleCopyHelper m_helper;
   };
 
@@ -363,6 +366,14 @@ private:
     auto data2 = LoadBMP("data/stonebrick.bmp", &w2, &h2);
     auto data3 = LoadBMP("data/metal.bmp",      &w3, &h3);
 
+    if (data1.size() == 0)
+      RUN_TIME_ERROR("data/texture1.bmp | NOT FOUND!");
+    if (data2.size() == 0)
+      RUN_TIME_ERROR("data/stonebrick.bmp | NOT FOUND!");
+    if (data3.size() == 0)
+      RUN_TIME_ERROR("data/metal.bmp | NOT FOUND!");
+
+
     m_pTex1    = std::make_shared<vk_texture::SimpleVulkanTexture>();
     m_pTex2    = std::make_shared<vk_texture::SimpleVulkanTexture>();
     m_pTex3    = std::make_shared<vk_texture::SimpleVulkanTexture>();
@@ -394,42 +405,29 @@ private:
     CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, 3,
                                   &descriptorPool, descriptorSet);
 
-    m_pCopyHelper->m_helper.UpdateImage(m_pTex1->Image(), data1.data(), w1, h1, sizeof(int));
-    m_pCopyHelper->m_helper.UpdateImage(m_pTex2->Image(), data2.data(), w2, h2, sizeof(int));
-    m_pCopyHelper->m_helper.UpdateImage(m_pTex3->Image(), data3.data(), w3, h3, sizeof(int));
+    m_pCopyHelper->UpdateImage(m_pTex1->Image(), data1.data(), w1, h1, sizeof(int));
+    m_pCopyHelper->UpdateImage(m_pTex2->Image(), data2.data(), w2, h2, sizeof(int));
+    m_pCopyHelper->UpdateImage(m_pTex3->Image(), data3.data(), w3, h3, sizeof(int));
     
     // generate all mips
     //
     {
-      VkCommandBuffer cmdBuff = nullptr;
-      {
-        VkCommandBufferAllocateInfo allocInfo = {};
-        allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.pNext              = nullptr;
-        allocInfo.commandPool        = commandPool;
-        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        
-        if (vkAllocateCommandBuffers(device, &allocInfo, &cmdBuff) != VK_SUCCESS)
-          throw std::runtime_error("[FFF]: failed to allocate command buffer!");
-      }
+      VkCommandBuffer cmdBuff = m_pCopyHelper->CmdBuffer(); 
 
+      vkResetCommandBuffer(cmdBuff, 0);
       VkCommandBufferBeginInfo beginInfo = {};
       beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
       beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      m_pTex1->GenerateMips(cmdBuff, transferQueue);
-      m_pTex2->GenerateMips(cmdBuff, transferQueue);
-      m_pTex3->GenerateMips(cmdBuff, transferQueue);
+      m_pTex1->GenerateMipsCmd(cmdBuff, transferQueue);
+      m_pTex2->GenerateMipsCmd(cmdBuff, transferQueue);
+      m_pTex3->GenerateMipsCmd(cmdBuff, transferQueue);
      
       vkEndCommandBuffer(cmdBuff);
 
       vk_utils::ExecuteCommandBufferNow(cmdBuff, transferQueue, device);
-
-      vkFreeCommandBuffers(device, commandPool, 1, &cmdBuff);
     }
 
     // create meshes
@@ -440,7 +438,7 @@ private:
 
     auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
     auto teapData = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
-    auto lucyData = cmesh::LoadMeshFromVSGF("data/lucy.vsgf");
+    auto lucyData = cmesh::LoadMeshFromVSGF("data/bunny0.vsgf");
 
     if(teapData.VerticesNum() == 0)
       RUN_TIME_ERROR("can't load mesh at 'data/teapot.vsgf'");
@@ -813,7 +811,7 @@ private:
     VkPushConstantRange pcRange = {};   
     pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     pcRange.offset     = 0;
-    pcRange.size       = 16*2*sizeof(float);
+    pcRange.size       = 16*2*sizeof(float) + 4*sizeof(float);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -901,37 +899,40 @@ private:
       auto mLookAt         = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
 
       // draw plane
-      LiteMath::float4x4 matrices[2];
+      LiteMath::float4x4 matrices[3];
       {
         auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
         matrices[0] = LiteMath::transpose(LiteMath::mul(mLookAt, mrot));  
         matrices[1] = mProjTransposed;
+        matrices[2].row[0].x = m_cam.pos.x;  matrices[2].row[0].y = m_cam.pos.y;  matrices[2].row[0].z = m_cam.pos.z; // pass cam pos to shader
       }
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
       m_pTerrainMesh->DrawCmd(a_cmdBuff);
       
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+1, 0, NULL);
 
       // draw teapot
       {
-        auto mtranslate = LiteMath::translate4x4({-0.85f, 0.4f, 0.0f});
+        auto mtranslate = LiteMath::translate4x4({-0.5f, 0.4f, -0.5f});
         matrices[0]     = LiteMath::transpose(LiteMath::mul(mLookAt, mtranslate));  
         matrices[1]     = mProjTransposed;
+        matrices[2].row[0].x = m_cam.pos.x;  matrices[2].row[0].y = m_cam.pos.y;  matrices[2].row[0].z = m_cam.pos.z; // pass cam pos to shader
       }
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
       m_pTeapotMesh->DrawCmd(a_cmdBuff);
       
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+2, 0, NULL);
 
-      // draw lucy
+      // draw bunny
       {
-        auto mtranslate = LiteMath::translate4x4({+0.85f, 0.0f, 0.0f});
-        auto mscale     = LiteMath::scale4x4({0.25, 0.25, 0.25});
+        auto mtranslate = LiteMath::translate4x4({+1.25f, 0.6f, 0.5f});
+        auto mscale     = LiteMath::scale4x4({75.0, 75.0, 75.0});
         matrices[0]     = LiteMath::transpose(LiteMath::mul(mLookAt, (LiteMath::mul(mtranslate, mscale))));  
         matrices[1]     = mProjTransposed;
+        matrices[2].row[0].x = m_cam.pos.x;  matrices[2].row[0].y = m_cam.pos.y;  matrices[2].row[0].z = m_cam.pos.z; // pass cam pos to shader
       }
 
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16, matrices);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
       m_pLucyMesh->DrawCmd(a_cmdBuff);
 
       vkCmdEndRenderPass(a_cmdBuff);

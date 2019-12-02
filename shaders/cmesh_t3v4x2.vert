@@ -8,6 +8,7 @@ layout(push_constant) uniform params_t
 {
   mat4 mWorldView;
   mat4 mProj;  
+  vec4 wCamPos;
 
 } params;
 

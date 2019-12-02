@@ -14,16 +14,23 @@ layout (location = 0 ) in VS_OUT
 
 layout (binding = 0) uniform sampler2D diffColor;
 
+layout(push_constant) uniform params_t
+{
+  mat4 mWorldView;
+  mat4 mProj;  
+  vec4 wCamPos;
+
+} params;
+
 void main()
 {
   const vec3  lightDir  = normalize(vec3(1,1,1));
   const float dpFactor  = max(dot(lightDir, surf.wNorm), 0.0f);
 
-  //const float  cosPower   = 100.0f;
-  //const float3 v          = surf.wPos - g_camPos;
-  //const float3 r          = reflect((-1.0f)*v, n);
-  //const float  cosAlpha   = clamp(dot(l, r), 0.0f, M_PI*0.499995f);
-  //const float  phongPower = pow(cosAlpha, cosPower);
+  const float cosPower   = 120.0f;
+  const vec3  v          = normalize(surf.wPos - params.wCamPos.xyz);
+  const vec3  r          = reflect(v, surf.wNorm);
+  const float cosAlpha   = clamp(dot(lightDir, r), 0.0f, 1.0f);
 
-  color = texture(diffColor, surf.texCoord)*(dpFactor + 0.05f);
+  color = texture(diffColor, surf.texCoord*2.0f)*(dpFactor + 0.05f) + vec4(1,1,1,1)*pow(cosAlpha, cosPower);
 }
