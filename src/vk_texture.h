@@ -25,17 +25,22 @@ namespace vk_texture
   };
 
 
-  struct Texture2D
+  struct SimpleTexture2D
   {
-    Texture2D() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
-    ~Texture2D();
+    SimpleTexture2D() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
+    ~SimpleTexture2D();
    
+    //// information functions
+    //
     VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
     void                 BindMemory (VkDeviceMemory a_memStorage, size_t a_offset);
     void                 Update     (const void* a_src, int a_width, int a_height, int a_bpp, ICopyEngine* a_pCopyImpl);
-    void                 GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a_queue);
-
-
+  
+    void                 GenerateMipsCmd(VkCommandBuffer a_cmdBuff);
+    void                 ChangeLayoutCmd(VkCommandBuffer a_cmdBuff, VkImageLayout a_newLayout, VkPipelineStageFlags a_newStage);
+    
+    //// information functions
+    //
     VkImage              Image()   const { return imageGPU;     }
     VkImageView          View()    const { return imageView;    }
     VkSampler            Sampler() const { return imageSampler; }
@@ -45,8 +50,8 @@ namespace vk_texture
     int                  Height()     const { return m_height; }
     VkFormat             Format()     const { return m_format; }
 
-    VkImageLayout           Layout()  const { return m_currentLayout; }
-    VkPipelineStageFlagBits Stage()   const { return m_currentStage;  }
+    VkImageLayout        Layout()     const { return m_currentLayout; }
+    VkPipelineStageFlags Stage()      const { return m_currentStage;  }
 
   protected:
 
@@ -61,8 +66,8 @@ namespace vk_texture
     
     VkImageCreateInfo  m_createImageInfo;
 
-    VkImageLayout           m_currentLayout;
-    VkPipelineStageFlagBits m_currentStage;
+    VkImageLayout        m_currentLayout;
+    VkPipelineStageFlags m_currentStage;
 
   };
 

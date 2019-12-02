@@ -9,7 +9,7 @@
 #undef min
 #endif
 
-vk_texture::Texture2D::~Texture2D()
+vk_texture::SimpleTexture2D::~SimpleTexture2D()
 {
   if (m_device == nullptr)
     return;
@@ -22,7 +22,7 @@ vk_texture::Texture2D::~Texture2D()
   m_currentStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
-VkMemoryRequirements vk_texture::Texture2D::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
+VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
 {
   m_device = a_device;
   m_width  = a_width;
@@ -78,7 +78,7 @@ VkMemoryRequirements vk_texture::Texture2D::CreateImage(VkDevice a_device, const
   return memoryRequirements;
 }
 
-void vk_texture::Texture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
+void vk_texture::SimpleTexture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
 {
   assert(memStorage == nullptr); // this implementation does not allow to rebind memory!
   assert(imageView  == nullptr); // may be later ... 
@@ -107,7 +107,7 @@ void vk_texture::Texture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_off
   VK_CHECK_RESULT(vkCreateImageView(m_device, &imageViewInfo, nullptr, &this->imageView));
 }
 
-void vk_texture::Texture2D::Update(const void* a_src, int a_width, int a_height, int a_bpp, ICopyEngine* a_pCopyImpl)
+void vk_texture::SimpleTexture2D::Update(const void* a_src, int a_width, int a_height, int a_bpp, ICopyEngine* a_pCopyImpl)
 {
   assert(a_pCopyImpl != nullptr);
   
@@ -245,10 +245,9 @@ namespace vk_utils
     }
 };
 
-void vk_texture::Texture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a_queue)
+void vk_texture::SimpleTexture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff)
 {
-  VkCommandBuffer blitCmd   = a_cmdBuff;
-  VkQueue         copyQueue = a_queue;
+  VkCommandBuffer blitCmd = a_cmdBuff;
 
   // at first, transfer 0 mip level to the VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
   {
@@ -339,6 +338,9 @@ void vk_texture::Texture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT);
   }
+  
+  //m_currentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  //this->ChangeLayoutCmd(blitCmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
   // After the loop, all mip layers are in TRANSFER_SRC layout, so transition all to SHADER_READ
   {
@@ -372,4 +374,40 @@ void vk_texture::Texture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a
 
   m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   m_currentStage  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  
+}
+
+void vk_texture::SimpleTexture2D::ChangeLayoutCmd(VkCommandBuffer a_cmdBuff, VkImageLayout a_newLayout, VkPipelineStageFlags a_newStage)
+{
+  if(m_currentLayout == a_newLayout && m_currentStage == a_newStage)
+    return;
+
+  VkImageMemoryBarrier imgBar = {};
+  
+  imgBar.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  imgBar.pNext               = nullptr;
+  imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  imgBar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  imgBar.srcAccessMask       = 0;
+  imgBar.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+  imgBar.oldLayout           = m_currentLayout;
+  imgBar.newLayout           = a_newLayout;
+  imgBar.image               = imageGPU;
+
+  imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+  imgBar.subresourceRange.baseMipLevel   = 0;
+  imgBar.subresourceRange.levelCount     = m_mipLevels;
+  imgBar.subresourceRange.baseArrayLayer = 0;
+  imgBar.subresourceRange.layerCount     = 1;
+
+  vkCmdPipelineBarrier(a_cmdBuff,
+                       m_currentStage,
+                       a_newStage,
+                       0,
+                       0, nullptr,
+                       0, nullptr,
+                       1, &imgBar);
+
+  m_currentLayout = a_newLayout;
+  m_currentStage  = a_newStage;
 }

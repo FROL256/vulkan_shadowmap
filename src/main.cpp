@@ -208,7 +208,7 @@ private:
   std::shared_ptr<vk_geom::IMesh> m_pTeapotMesh;
   std::shared_ptr<vk_geom::IMesh> m_pLucyMesh;
 
-  std::shared_ptr<vk_texture::Texture2D> m_pTex1, m_pTex2, m_pTex3;
+  std::shared_ptr<vk_texture::SimpleTexture2D> m_pTex1, m_pTex2, m_pTex3;
 
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -375,9 +375,9 @@ private:
       RUN_TIME_ERROR("data/metal.bmp | NOT FOUND!");
 
 
-    m_pTex1    = std::make_shared<vk_texture::Texture2D>();
-    m_pTex2    = std::make_shared<vk_texture::Texture2D>();
-    m_pTex3    = std::make_shared<vk_texture::Texture2D>();
+    m_pTex1    = std::make_shared<vk_texture::SimpleTexture2D>();
+    m_pTex2    = std::make_shared<vk_texture::SimpleTexture2D>();
+    m_pTex3    = std::make_shared<vk_texture::SimpleTexture2D>();
     
     auto memReqTex1 = m_pTex1->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex2 = m_pTex2->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
@@ -422,9 +422,9 @@ private:
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      m_pTex1->GenerateMipsCmd(cmdBuff, transferQueue);                             // --> put m_pTex1 in shader read optimal
-      m_pTex2->GenerateMipsCmd(cmdBuff, transferQueue);                             // --> put m_pTex2 in shader read optimal
-      m_pTex3->GenerateMipsCmd(cmdBuff, transferQueue);                             // --> put m_pTex3 in shader read optimal
+      m_pTex1->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex1 in shader read optimal
+      m_pTex2->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex2 in shader read optimal
+      m_pTex3->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex3 in shader read optimal
      
       vkEndCommandBuffer(cmdBuff);
 
