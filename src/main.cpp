@@ -405,9 +405,9 @@ private:
     CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, 3,
                                   &descriptorPool, descriptorSet);
 
-    m_pCopyHelper->UpdateImage(m_pTex1->Image(), data1.data(), w1, h1, sizeof(int));
-    m_pCopyHelper->UpdateImage(m_pTex2->Image(), data2.data(), w2, h2, sizeof(int));
-    m_pCopyHelper->UpdateImage(m_pTex3->Image(), data3.data(), w3, h3, sizeof(int));
+    m_pCopyHelper->UpdateImage(m_pTex1->Image(), data1.data(), w1, h1, sizeof(int)); // --> put m_pTex1 in transfer_dst
+    m_pCopyHelper->UpdateImage(m_pTex2->Image(), data2.data(), w2, h2, sizeof(int)); // --> put m_pTex2 in transfer_dst
+    m_pCopyHelper->UpdateImage(m_pTex3->Image(), data3.data(), w3, h3, sizeof(int)); // --> put m_pTex3 in transfer_dst
     
     // generate all mips
     //
@@ -421,9 +421,9 @@ private:
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      m_pTex1->GenerateMipsCmd(cmdBuff, transferQueue);
-      m_pTex2->GenerateMipsCmd(cmdBuff, transferQueue);
-      m_pTex3->GenerateMipsCmd(cmdBuff, transferQueue);
+      m_pTex1->GenerateMipsCmd(cmdBuff, transferQueue);                             // --> put m_pTex1 in shader read optimal
+      m_pTex2->GenerateMipsCmd(cmdBuff, transferQueue);                             // --> put m_pTex2 in shader read optimal
+      m_pTex3->GenerateMipsCmd(cmdBuff, transferQueue);                             // --> put m_pTex3 in shader read optimal
      
       vkEndCommandBuffer(cmdBuff);
 
