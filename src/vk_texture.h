@@ -10,24 +10,45 @@
 
 namespace vk_texture
 {
-
-  struct SimpleVulkanTexture
+  // Application should implement this interface
+  //
+  struct ICopyEngine
   {
-    SimpleVulkanTexture() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
-    ~SimpleVulkanTexture();
+    ICopyEngine(){}
+    virtual ~ICopyEngine(){}
+
+    virtual void UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp) = 0;
+
+  protected:
+    ICopyEngine(const ICopyEngine& rhs) {}
+    ICopyEngine& operator=(const ICopyEngine& rhs) { return *this; }    
+  };
+
+
+  struct Texture2D
+  {
+    Texture2D() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
+    ~Texture2D();
    
     VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
     void                 BindMemory (VkDeviceMemory a_memStorage, size_t a_offset);
-
+    void                 Update     (const void* a_src, int a_width, int a_height, int a_bpp, ICopyEngine* a_pCopyImpl);
     void                 GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a_queue);
 
-    VkImage              Image()   const { return imageGPU; }
-    VkImageView          View()    const { return imageView; }
+
+    VkImage              Image()   const { return imageGPU;     }
+    VkImageView          View()    const { return imageView;    }
     VkSampler            Sampler() const { return imageSampler; }
 
-  protected:
+    VkImageCreateInfo    CreateInfo() const { return m_createImageInfo; }
+    int                  Width()      const { return m_width;  }
+    int                  Height()     const { return m_height; }
+    VkFormat             Format()     const { return m_format; }
 
-    void CreateOther();
+    VkImageLayout           Layout()  const { return m_currentLayout; }
+    VkPipelineStageFlagBits Stage()   const { return m_currentStage;  }
+
+  protected:
 
     VkDeviceMemory memStorage; // SimpleVulkanTexture DOES NOT OWN memStorage! It just save reference to it.
     VkImage        imageGPU;
@@ -37,7 +58,17 @@ namespace vk_texture
     VkFormat       m_format;
     int m_width, m_height;
     int m_mipLevels;
+    
+    VkImageCreateInfo  m_createImageInfo;
+
+    VkImageLayout           m_currentLayout;
+    VkPipelineStageFlagBits m_currentStage;
+
   };
+
+
+  
+
 };
 
 #endif

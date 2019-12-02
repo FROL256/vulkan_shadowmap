@@ -9,7 +9,7 @@
 #undef min
 #endif
 
-vk_texture::SimpleVulkanTexture::~SimpleVulkanTexture()
+vk_texture::Texture2D::~Texture2D()
 {
   if (m_device == nullptr)
     return;
@@ -17,9 +17,12 @@ vk_texture::SimpleVulkanTexture::~SimpleVulkanTexture()
   vkDestroyImage    (m_device, imageGPU, NULL);     imageGPU = nullptr;
   vkDestroyImageView(m_device, imageView, NULL);    imageView = nullptr;
   vkDestroySampler  (m_device, imageSampler, NULL); imageSampler = nullptr;
+
+  m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  m_currentStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
-VkMemoryRequirements vk_texture::SimpleVulkanTexture::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
+VkMemoryRequirements vk_texture::Texture2D::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
 {
   m_device = a_device;
   m_width  = a_width;
@@ -70,10 +73,12 @@ VkMemoryRequirements vk_texture::SimpleVulkanTexture::CreateImage(VkDevice a_dev
   }
   VK_CHECK_RESULT(vkCreateSampler(a_device, &samplerInfo, nullptr, &this->imageSampler));
 
+  m_createImageInfo = imgCreateInfo;
+
   return memoryRequirements;
 }
 
-void vk_texture::SimpleVulkanTexture::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
+void vk_texture::Texture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
 {
   assert(memStorage == nullptr); // this implementation does not allow to rebind memory!
   assert(imageView  == nullptr); // may be later ... 
@@ -102,30 +107,14 @@ void vk_texture::SimpleVulkanTexture::BindMemory(VkDeviceMemory a_memStorage, si
   VK_CHECK_RESULT(vkCreateImageView(m_device, &imageViewInfo, nullptr, &this->imageView));
 }
 
-void vk_texture::SimpleVulkanTexture::CreateOther()
+void vk_texture::Texture2D::Update(const void* a_src, int a_width, int a_height, int a_bpp, ICopyEngine* a_pCopyImpl)
 {
-  VkSamplerCreateInfo samplerInfo = {};
-  {
-    samplerInfo.sType         = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.pNext         = nullptr;
-    samplerInfo.flags         = 0;
-    samplerInfo.magFilter     = VK_FILTER_LINEAR;
-    samplerInfo.minFilter     = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    samplerInfo.addressModeU  = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV  = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW  = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.mipLodBias    = 0.0f;
-    samplerInfo.compareOp     = VK_COMPARE_OP_NEVER;
-    samplerInfo.minLod        = 0;
-    samplerInfo.maxLod        = 0;
-    samplerInfo.maxAnisotropy = 1.0;
-    samplerInfo.anisotropyEnable        = VK_FALSE;
-    samplerInfo.borderColor             = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-  }
-  VK_CHECK_RESULT(vkCreateSampler(m_device, &samplerInfo, nullptr, &this->imageSampler));
- 
+  assert(a_pCopyImpl != nullptr);
+  
+  a_pCopyImpl->UpdateImage(Image(), a_src, a_width, a_height, a_bpp);
+  
+  m_currentLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; 
+  m_currentStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
 namespace vk_utils
@@ -256,7 +245,7 @@ namespace vk_utils
     }
 };
 
-void vk_texture::SimpleVulkanTexture::GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a_queue)
+void vk_texture::Texture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff, VkQueue a_queue)
 {
   VkCommandBuffer blitCmd   = a_cmdBuff;
   VkQueue         copyQueue = a_queue;
@@ -272,7 +261,7 @@ void vk_texture::SimpleVulkanTexture::GenerateMipsCmd(VkCommandBuffer a_cmdBuff,
     
     imgBar.srcAccessMask = 0;
     imgBar.dstAccessMask = 0;
-    imgBar.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    imgBar.oldLayout     = m_currentLayout;
     imgBar.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     imgBar.image         = imageGPU;
   
@@ -283,7 +272,7 @@ void vk_texture::SimpleVulkanTexture::GenerateMipsCmd(VkCommandBuffer a_cmdBuff,
     imgBar.subresourceRange.layerCount     = 1;
   
     vkCmdPipelineBarrier(blitCmd,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         m_currentStage,
                          VK_PIPELINE_STAGE_TRANSFER_BIT,
                          0,
                          0, nullptr,
@@ -380,4 +369,7 @@ void vk_texture::SimpleVulkanTexture::GenerateMipsCmd(VkCommandBuffer a_cmdBuff,
                          0, nullptr,
                          1, &imgBar);
   }
+
+  m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  m_currentStage  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 }

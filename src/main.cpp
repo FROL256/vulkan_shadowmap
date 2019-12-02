@@ -189,12 +189,13 @@ private:
   Camera m_cam;
   
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  struct CopyEngine : public vk_geom::ICopyEngine
+  struct CopyEngine : public vk_geom::ICopyEngine, 
+                      public vk_texture::ICopyEngine
   {
     CopyEngine(VkPhysicalDevice a_physicalDevice, VkDevice a_device, VkQueue a_transferQueue, size_t a_stagingBuffSize) : m_helper(a_physicalDevice, a_device, a_transferQueue, a_stagingBuffSize) {}
   
-    void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size) override { m_helper.UpdateBuffer(a_dst, a_dstOffset, a_src, a_size); }
-    void UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp)       { m_helper.UpdateImage(a_image, a_src, a_width, a_height, a_bpp); }
+    void UpdateBuffer(VkBuffer a_dst, size_t a_dstOffset, const void* a_src, size_t a_size)    override { m_helper.UpdateBuffer(a_dst, a_dstOffset, a_src, a_size); }
+    void UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp) override { m_helper.UpdateImage(a_image, a_src, a_width, a_height, a_bpp); }
 
     VkCommandBuffer CmdBuffer() { return m_helper.CmdBuffer(); }
 
@@ -207,7 +208,7 @@ private:
   std::shared_ptr<vk_geom::IMesh> m_pTeapotMesh;
   std::shared_ptr<vk_geom::IMesh> m_pLucyMesh;
 
-  std::shared_ptr<vk_texture::SimpleVulkanTexture> m_pTex1, m_pTex2, m_pTex3;
+  std::shared_ptr<vk_texture::Texture2D> m_pTex1, m_pTex2, m_pTex3;
 
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -374,9 +375,9 @@ private:
       RUN_TIME_ERROR("data/metal.bmp | NOT FOUND!");
 
 
-    m_pTex1    = std::make_shared<vk_texture::SimpleVulkanTexture>();
-    m_pTex2    = std::make_shared<vk_texture::SimpleVulkanTexture>();
-    m_pTex3    = std::make_shared<vk_texture::SimpleVulkanTexture>();
+    m_pTex1    = std::make_shared<vk_texture::Texture2D>();
+    m_pTex2    = std::make_shared<vk_texture::Texture2D>();
+    m_pTex3    = std::make_shared<vk_texture::Texture2D>();
     
     auto memReqTex1 = m_pTex1->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex2 = m_pTex2->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
@@ -405,9 +406,9 @@ private:
     CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, 3,
                                   &descriptorPool, descriptorSet);
 
-    m_pCopyHelper->UpdateImage(m_pTex1->Image(), data1.data(), w1, h1, sizeof(int)); // --> put m_pTex1 in transfer_dst
-    m_pCopyHelper->UpdateImage(m_pTex2->Image(), data2.data(), w2, h2, sizeof(int)); // --> put m_pTex2 in transfer_dst
-    m_pCopyHelper->UpdateImage(m_pTex3->Image(), data3.data(), w3, h3, sizeof(int)); // --> put m_pTex3 in transfer_dst
+    m_pTex1->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex1 in transfer_dst
+    m_pTex2->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex2 in transfer_dst
+    m_pTex3->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex3 in transfer_dst
     
     // generate all mips
     //
