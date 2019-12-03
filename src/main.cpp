@@ -358,7 +358,7 @@ private:
     CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
 
     m_pFSQuad = std::make_shared<vk_utils::FSQuad>();
-    //m_pFSQuad->Create(device, VkExtent2D{WIDTH, HEIGHT}, renderPass, "shaders/quad_vert.spv", "shaders/quad_frag.spv");
+    m_pFSQuad->Create(device, VkExtent2D{WIDTH, HEIGHT}, screen.swapChainImageFormat, "shaders/quad_vert.spv", "shaders/quad_frag.spv");
   
     CreateSyncObjects(device, &m_sync);
 

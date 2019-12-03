@@ -30,6 +30,7 @@ add_executable(vulkan_minimal_graphics src/main.cpp
                                        src/cmesh.h src/cmesh.cpp
                                        src/cmesh_vsgf.h src/cmesh_vsgf.cpp 
                                        src/vk_texture.h src/vk_texture.cpp
+                                       src/vk_quad.h src/vk_quad.cpp
                                        src/Bitmap.h src/Bitmap.cpp)
 
 set_target_properties(vulkan_minimal_graphics PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
