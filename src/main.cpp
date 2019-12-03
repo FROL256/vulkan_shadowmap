@@ -48,6 +48,8 @@ struct g_input_t
   bool firstMouse   = true;
   bool captureMouse = false;
   bool capturedMouseJustNow = false;
+  bool drawFSQuad = false;
+
   float lastX,lastY, scrollY;
   float camMoveSpeed     = 1.0f;
   float mouseSensitivity = 0.1f;
@@ -74,7 +76,16 @@ void OnKeyboardPressed(GLFWwindow* window, int key, int scancode, int action, in
   case GLFW_KEY_2:
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     break;
-	default:
+
+  case GLFW_KEY_9:
+    g_input.drawFSQuad = true;
+    break;  
+
+  case GLFW_KEY_0:
+    g_input.drawFSQuad = false;
+    break;  
+	
+  default:
 		//if (action == GLFW_PRESS)
 		//	keys[key] = true;
 		//else if (action == GLFW_RELEASE)
@@ -867,7 +878,7 @@ private:
     vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
   }
 
-  void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo,  VkExtent2D a_frameBufferExtent, 
+  void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo, VkImageView a_targetImageView,  VkExtent2D a_frameBufferExtent, 
                           VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
                           VkCommandBuffer& a_cmdBuff)
   {
@@ -943,7 +954,14 @@ private:
 
       vkCmdEndRenderPass(a_cmdBuff);
     }
-  
+    
+    if(g_input.drawFSQuad)
+    {
+      float scaleAndOffset[4] = {0.5f, 0.5f, -0.5f, +0.5f};
+      m_pFSQuad->AssignRenderTarget(a_targetImageView, WIDTH, HEIGHT);
+      m_pFSQuad->DrawCmd(a_cmdBuff, scaleAndOffset);
+    }
+
     if (vkEndCommandBuffer(a_cmdBuff) != VK_SUCCESS)
       throw std::runtime_error("failed to record command buffer!");  
   }
@@ -968,7 +986,7 @@ private:
 
     for (size_t i = 0; i < commandBuffers.size(); i++) 
     {
-      WriteCommandBuffer(a_renderPass, a_swapChainFramebuffers[i], a_frameBufferExtent, a_graphicsPipeline, a_layout, 
+      WriteCommandBuffer(a_renderPass, a_swapChainFramebuffers[i], screen.swapChainImageViews[i], a_frameBufferExtent, a_graphicsPipeline, a_layout, 
                          commandBuffers[i]);
     }
   }
@@ -1007,7 +1025,7 @@ private:
     // update next used command buffer
     //
     {
-      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[imageIndex], screen.swapChainExtent, graphicsPipeline, pipelineLayout, 
+      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[imageIndex], screen.swapChainImageViews[imageIndex], screen.swapChainExtent, graphicsPipeline, pipelineLayout, 
                          commandBuffers[imageIndex]);
     }
 
