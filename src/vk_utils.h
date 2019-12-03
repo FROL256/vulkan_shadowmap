@@ -10,6 +10,7 @@
 
 #include <stdexcept>
 #include <sstream>
+#include <cassert>
 
 namespace vk_utils
 {

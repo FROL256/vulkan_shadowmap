@@ -7,6 +7,8 @@
 #include <sstream>
 #include <memory>
 
+namespace vk_utils
+{
   static void CreateRenderPass(VkDevice a_device, VkFormat a_swapChainImageFormat,
                                VkRenderPass* a_pRenderPass)
   {
@@ -49,6 +51,7 @@
     if (vkCreateRenderPass(a_device, &renderPassInfo, nullptr, a_pRenderPass) != VK_SUCCESS)
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
+};
 
 vk_utils::FSQuad::~FSQuad()
 {
@@ -61,6 +64,9 @@ vk_utils::FSQuad::~FSQuad()
 
   if(m_fbTarget != nullptr)
     vkDestroyFramebuffer(m_device, m_fbTarget, NULL);
+
+  if(m_dlayout != nullptr)
+    vkDestroyDescriptorSetLayout(m_device, m_dlayout, NULL);
 }
 
 void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_fbFormat, const char* a_vspath, const char* a_fspath)
@@ -152,6 +158,25 @@ void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_
   colorBlending.blendConstants[2] = 0.0f;
   colorBlending.blendConstants[3] = 0.0f;  
 
+  // create ds layout for binding texture shader 
+  //
+  {
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[1];
+    
+    descriptorSetLayoutBinding[0].binding            = 0;
+    descriptorSetLayoutBinding[0].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorSetLayoutBinding[0].descriptorCount    = 1;
+    descriptorSetLayoutBinding[0].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+    descriptorSetLayoutBinding[0].pImmutableSamplers = nullptr;  
+  
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+    descriptorSetLayoutCreateInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutCreateInfo.bindingCount = 1;
+    descriptorSetLayoutCreateInfo.pBindings    = descriptorSetLayoutBinding;  
+  
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, &m_dlayout));
+  }
+
   VkPushConstantRange pcRange = {};   
   pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
   pcRange.offset     = 0;
@@ -162,12 +187,14 @@ void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_
   pipelineLayoutInfo.setLayoutCount         = 0;
   pipelineLayoutInfo.pushConstantRangeCount = 1; 
   pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
+  pipelineLayoutInfo.pSetLayouts            = &m_dlayout;
+  pipelineLayoutInfo.setLayoutCount         = 1;
 
   if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, &m_layout) != VK_SUCCESS)
     throw std::runtime_error("[FSQuad::Create]: failed to create pipeline layout!");
   
-  ::CreateRenderPass(m_device, a_fbFormat,
-                     &m_renderPass);
+  vk_utils::CreateRenderPass(m_device, a_fbFormat,
+                             &m_renderPass);
   
   // finally create graphics pipeline
   //
@@ -217,7 +244,7 @@ void vk_utils::FSQuad::AssignRenderTarget(VkImageView a_imageView, int a_width, 
   m_targetView = a_imageView; 
 }
 
-void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, float* a_offsAndScale)
+void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_textDSet, float* a_offsAndScale)
 {
   VkRenderPassBeginInfo renderPassInfo = {};
   renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -233,8 +260,8 @@ void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, float* a_offsAndScale)
 
   vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);  
 
-  vkCmdBindPipeline   (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-  //vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+0, 0, NULL);
+  vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+  vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &a_textDSet, 0, NULL);
 
   float scaleAndOffset[4] = {1.0f, 1.0f, 0.0f, 0.0f};
   if(a_offsAndScale != 0)

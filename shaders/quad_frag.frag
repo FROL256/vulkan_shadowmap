@@ -3,7 +3,14 @@
 
 layout(location = 0) out vec4 color;
 
+layout (binding = 0) uniform sampler2D colorTex;
+
+layout (location = 0 ) in VS_OUT
+{
+  vec2 texCoord;
+} surf;
+
 void main()
 {
-  color = vec4(1.0f, 0.0f, 0.0f, 1.0f);
+  color = textureLod(colorTex, surf.texCoord, 0);
 }

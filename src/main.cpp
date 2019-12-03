@@ -959,7 +959,7 @@ private:
     {
       float scaleAndOffset[4] = {0.5f, 0.5f, -0.5f, +0.5f};
       m_pFSQuad->AssignRenderTarget(a_targetImageView, WIDTH, HEIGHT);
-      m_pFSQuad->DrawCmd(a_cmdBuff, scaleAndOffset);
+      m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSet[0], scaleAndOffset);
     }
 
     if (vkEndCommandBuffer(a_cmdBuff) != VK_SUCCESS)
