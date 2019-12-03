@@ -10,14 +10,14 @@
 
 namespace vk_texture
 {
-  // Application should implement this interface
+  // Application should implement this interface // #TODO: pass layout and curr stage explicitly for copy engine!
   //
   struct ICopyEngine
   {
     ICopyEngine(){}
     virtual ~ICopyEngine(){}
 
-    virtual void UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp) = 0;
+    virtual void UpdateImage(VkImage a_image, const void* a_src, int a_width, int a_height, int a_bpp) = 0; // this function assume texture is in undefined layout and it must leave texture in transfer dst layout
 
   protected:
     ICopyEngine(const ICopyEngine& rhs) {}
@@ -30,7 +30,7 @@ namespace vk_texture
     SimpleTexture2D() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
     ~SimpleTexture2D();
    
-    //// information functions
+    //// useful functions
     //
     VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
     void                 BindMemory (VkDeviceMemory a_memStorage, size_t a_offset);
@@ -41,11 +41,11 @@ namespace vk_texture
     
     //// information functions
     //
-    VkImage              Image()   const { return imageGPU;     }
-    VkImageView          View()    const { return imageView;    }
-    VkSampler            Sampler() const { return imageSampler; }
+    VkImage              Image()      const { return imageGPU;     }
+    VkImageView          View()       const { return imageView;    }
+    VkSampler            Sampler()    const { return imageSampler; }
 
-    VkImageCreateInfo    CreateInfo() const { return m_createImageInfo; }
+    VkImageCreateInfo    Info()       const { return m_createImageInfo; }
     int                  Width()      const { return m_width;  }
     int                  Height()     const { return m_height; }
     VkFormat             Format()     const { return m_format; }

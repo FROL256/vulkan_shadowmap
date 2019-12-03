@@ -23,6 +23,7 @@
 #include "vk_geom.h"
 #include "vk_copy.h"
 #include "vk_texture.h"
+#include "vk_quad.h"
 #include "Bitmap.h"
 
 #include "Camera.h"
@@ -203,10 +204,11 @@ private:
   };
 
 
-  std::unique_ptr<CopyEngine>     m_pCopyHelper;
-  std::shared_ptr<vk_geom::IMesh> m_pTerrainMesh;
-  std::shared_ptr<vk_geom::IMesh> m_pTeapotMesh;
-  std::shared_ptr<vk_geom::IMesh> m_pLucyMesh;
+  std::unique_ptr<CopyEngine>       m_pCopyHelper;
+  std::shared_ptr<vk_geom::IMesh>   m_pTerrainMesh;
+  std::shared_ptr<vk_geom::IMesh>   m_pTeapotMesh;
+  std::shared_ptr<vk_geom::IMesh>   m_pLucyMesh;
+  std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
   std::shared_ptr<vk_texture::SimpleTexture2D> m_pTex1, m_pTex2, m_pTex3;
 
@@ -355,6 +357,8 @@ private:
   
     CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
 
+    m_pFSQuad = std::make_shared<vk_utils::FSQuad>();
+    //m_pFSQuad->Create(device, VkExtent2D{WIDTH, HEIGHT}, renderPass, "shaders/quad_vert.spv", "shaders/quad_frag.spv");
   
     CreateSyncObjects(device, &m_sync);
 
@@ -524,6 +528,7 @@ private:
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
     m_pTeapotMesh  = nullptr;
     m_pLucyMesh    = nullptr;
+    m_pFSQuad      = nullptr;
 
     // free our vbos
     vkFreeMemory(device, m_memAllMeshes, NULL);

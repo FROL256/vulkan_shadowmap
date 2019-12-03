@@ -673,62 +673,86 @@ namespace LiteMath
     return M;
   }
 
-   static inline void _my_frustumf3(float *matrix, float left, float right, float bottom, float top, float znear, float zfar)
-   {
-     float temp, temp2, temp3, temp4;
-     temp = 2.0f * znear;
-     temp2 = right - left;
-     temp3 = top - bottom;
-     temp4 = zfar - znear;
-     matrix[0] = temp / temp2;
-     matrix[1] = 0.0;
-     matrix[2] = 0.0;
-     matrix[3] = 0.0;
-     matrix[4] = 0.0;
-     matrix[5] = temp / temp3;
-     matrix[6] = 0.0;
-     matrix[7] = 0.0;
-     matrix[8] = (right + left) / temp2;
-     matrix[9] = (top + bottom) / temp3;
-     matrix[10] = (-zfar - znear) / temp4;
-     matrix[11] = -1.0;
-     matrix[12] = 0.0;
-     matrix[13] = 0.0;
-     matrix[14] = (-temp * zfar) / temp4;
-     matrix[15] = 0.0;
-   }
-   
-   static inline float4x4 projectionMatrixTransposed(float fovy, float aspect, float zNear, float zFar)
-   {
-     float4x4 res;
-     const float ymax = zNear * tanf(fovy * 3.14159265358979323846f / 360.0f);
-     const float xmax = ymax * aspect;
-     _my_frustumf3(res.L(), -xmax, xmax, -ymax, ymax, zNear, zFar);
-     return res;
-   }
+  static inline void _my_frustumf3(float *matrix, float left, float right, float bottom, float top, float znear, float zfar)
+  {
+    float temp, temp2, temp3, temp4;
+    temp = 2.0f * znear;
+    temp2 = right - left;
+    temp3 = top - bottom;
+    temp4 = zfar - znear;
+    matrix[0] = temp / temp2;
+    matrix[1] = 0.0;
+    matrix[2] = 0.0;
+    matrix[3] = 0.0;
+    matrix[4] = 0.0;
+    matrix[5] = temp / temp3;
+    matrix[6] = 0.0;
+    matrix[7] = 0.0;
+    matrix[8] = (right + left) / temp2;
+    matrix[9] = (top + bottom) / temp3;
+    matrix[10] = (-zfar - znear) / temp4;
+    matrix[11] = -1.0;
+    matrix[12] = 0.0;
+    matrix[13] = 0.0;
+    matrix[14] = (-temp * zfar) / temp4;
+    matrix[15] = 0.0;
+  }
+  
+  static inline float4x4 projectionMatrixTransposed(float fovy, float aspect, float zNear, float zFar)
+  {
+    float4x4 res;
+    const float ymax = zNear * tanf(fovy * 3.14159265358979323846f / 360.0f);
+    const float xmax = ymax * aspect;
+    _my_frustumf3(res.L(), -xmax, xmax, -ymax, ymax, zNear, zFar);
+    return res;
+  }
 
-   static inline float4x4 transpose(const float4x4 a_mat)
-   {
-     float4x4 res;
-     res.row[0].x = a_mat.row[0].x;
-     res.row[0].y = a_mat.row[1].x;
-     res.row[0].z = a_mat.row[2].x;
-     res.row[0].w = a_mat.row[3].x;
-     res.row[1].x = a_mat.row[0].y;
-     res.row[1].y = a_mat.row[1].y;
-     res.row[1].z = a_mat.row[2].y;
-     res.row[1].w = a_mat.row[3].y;
-     res.row[2].x = a_mat.row[0].z;
-     res.row[2].y = a_mat.row[1].z;
-     res.row[2].z = a_mat.row[2].z;
-     res.row[2].w = a_mat.row[3].z;
-     res.row[3].x = a_mat.row[0].w;
-     res.row[3].y = a_mat.row[1].w;
-     res.row[3].z = a_mat.row[2].w;
-     res.row[3].w = a_mat.row[3].w;
-     return res;
-   }
+  static inline float4x4 transpose(const float4x4 a_mat)
+  {
+    float4x4 res;
+    res.row[0].x = a_mat.row[0].x;
+    res.row[0].y = a_mat.row[1].x;
+    res.row[0].z = a_mat.row[2].x;
+    res.row[0].w = a_mat.row[3].x;
+    res.row[1].x = a_mat.row[0].y;
+    res.row[1].y = a_mat.row[1].y;
+    res.row[1].z = a_mat.row[2].y;
+    res.row[1].w = a_mat.row[3].y;
+    res.row[2].x = a_mat.row[0].z;
+    res.row[2].y = a_mat.row[1].z;
+    res.row[2].z = a_mat.row[2].z;
+    res.row[2].w = a_mat.row[3].z;
+    res.row[3].x = a_mat.row[0].w;
+    res.row[3].y = a_mat.row[1].w;
+    res.row[3].z = a_mat.row[2].w;
+    res.row[3].w = a_mat.row[3].w;
+    return res;
+  }
 
+  static inline float4x4 ortoMatrixTransposed(const float l, const float r, const float b, const float t, const float n, const float f) // please see glOrth
+  {
+    float4x4 res;
+    res.row[0].x = 2.0f / (r - l); 
+    res.row[0].y = 0; 
+    res.row[0].z = 0; 
+    res.row[0].w = 0; 
+ 
+    res.row[1].x = 0; 
+    res.row[1].y = 2.0f / (t - b); 
+    res.row[1].z = 0; 
+    res.row[1].w = 0; 
+ 
+    res.row[2].x = 0; 
+    res.row[2].y = 0; 
+    res.row[2].z = -2.0f / (f - n); 
+    res.row[2].w = 0; 
+ 
+    res.row[3].x = -(r + l) / (r - l); // assert (r != l);
+    res.row[3].y = -(t + b) / (t - b); // assert (t != b);
+    res.row[3].z = -(f + n) / (f - n); // assert (f != n);
+    res.row[3].w = 1.0f; 
+    return res;
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
