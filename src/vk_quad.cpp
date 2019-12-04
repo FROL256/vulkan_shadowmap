@@ -9,18 +9,18 @@
 
 namespace vk_utils
 {
-  static void CreateRenderPass(VkDevice a_device, VkFormat a_swapChainImageFormat,
+  static void CreateRenderPass(VkDevice a_device, RenderTargetInfo2D a_rtInfo,
                                VkRenderPass* a_pRenderPass)
   {
     VkAttachmentDescription colorAttachment = {};
-    colorAttachment.format         = a_swapChainImageFormat;
+    colorAttachment.format         = a_rtInfo.fmt;
     colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.loadOp         = a_rtInfo.loadOp;
     colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout  = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;    // !!!!!!!!!!!!!!!!!!!!!  
-    colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;    // !!!!!!!!!!!!!!!!!!!!!
+    colorAttachment.initialLayout  = a_rtInfo.initialLayout;   
+    colorAttachment.finalLayout    = a_rtInfo.finalLayout;   
 
     VkAttachmentReference colorAttachmentRef = {};
     colorAttachmentRef.attachment = 0;
@@ -69,10 +69,10 @@ vk_utils::FSQuad::~FSQuad()
     vkDestroyDescriptorSetLayout(m_device, m_dlayout, NULL);
 }
 
-void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_fbFormat, const char* a_vspath, const char* a_fspath)
+void vk_utils::FSQuad::Create(VkDevice a_device, const char* a_vspath, const char* a_fspath, RenderTargetInfo2D a_rtInfo)
 {
   m_device     = a_device;
-  m_fbSize     = a_fbRes;
+  m_fbSize     = a_rtInfo.size;
   
   auto vertShaderCode = vk_utils::ReadFile(a_vspath);
   auto fragShaderCode = vk_utils::ReadFile(a_fspath);
@@ -111,14 +111,14 @@ void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_
   VkViewport viewport = {};
   viewport.x          = 0.0f;
   viewport.y          = 0.0f;
-  viewport.width      = (float)a_fbRes.width;
-  viewport.height     = (float)a_fbRes.height;
+  viewport.width      = (float)m_fbSize.width;
+  viewport.height     = (float)m_fbSize.height;
   viewport.minDepth   = 0.0f;
   viewport.maxDepth   = 1.0f;  
   
   VkRect2D scissor = {};
   scissor.offset   = { 0, 0 };
-  scissor.extent   = a_fbRes;  
+  scissor.extent   = m_fbSize;
   
   VkPipelineViewportStateCreateInfo viewportState = {};
   viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -193,7 +193,7 @@ void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_
   if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, &m_layout) != VK_SUCCESS)
     throw std::runtime_error("[FSQuad::Create]: failed to create pipeline layout!");
   
-  vk_utils::CreateRenderPass(m_device, a_fbFormat,
+  vk_utils::CreateRenderPass(m_device, a_rtInfo,
                              &m_renderPass);
   
   // finally create graphics pipeline
@@ -220,7 +220,7 @@ void vk_utils::FSQuad::Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_
   vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
 }
 
-void vk_utils::FSQuad::AssignRenderTarget(VkImageView a_imageView, int a_width, int a_height)
+void vk_utils::FSQuad::SetRenderTarget(VkImageView a_imageView, int a_width, int a_height)
 {
   if(m_fbTarget != nullptr)
     vkDestroyFramebuffer(m_device, m_fbTarget, NULL);

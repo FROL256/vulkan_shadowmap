@@ -3,10 +3,17 @@
 
 #include <vulkan/vulkan.h>
 
-// full screen quad, please use it only for debug purposes, the current design is bad
-
 namespace vk_utils
 {
+  struct RenderTargetInfo2D
+  {
+    VkExtent2D         size;
+    VkFormat           fmt;
+    VkAttachmentLoadOp loadOp;      
+    VkImageLayout      initialLayout; 
+    VkImageLayout      finalLayout; 
+  };
+
   struct FSQuad
   {
     FSQuad() : m_pipeline(nullptr), m_layout(nullptr),  m_renderPass(nullptr), m_fbTarget(nullptr),
@@ -14,8 +21,8 @@ namespace vk_utils
 
     virtual ~FSQuad();
 
-    void Create(VkDevice a_device, VkExtent2D a_fbRes, VkFormat a_fbFormat, const char* a_vspath, const char* a_fspath);
-    void AssignRenderTarget(VkImageView a_imageView, int a_width, int a_height); 
+    void Create(VkDevice a_device, const char* a_vspath, const char* a_fspath, RenderTargetInfo2D a_rtInfo);
+    void SetRenderTarget(VkImageView a_imageView, int a_width, int a_height); 
 
     void DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_textDSet, float* a_offsAndScale = nullptr);
 

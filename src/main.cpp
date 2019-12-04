@@ -218,7 +218,7 @@ private:
   std::unique_ptr<CopyEngine>       m_pCopyHelper;
   std::shared_ptr<vk_geom::IMesh>   m_pTerrainMesh;
   std::shared_ptr<vk_geom::IMesh>   m_pTeapotMesh;
-  std::shared_ptr<vk_geom::IMesh>   m_pLucyMesh;
+  std::shared_ptr<vk_geom::IMesh>   m_pBunnyMesh;
   std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
   std::shared_ptr<vk_texture::SimpleTexture2D> m_pTex1, m_pTex2, m_pTex3;
@@ -369,7 +369,9 @@ private:
     CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
 
     m_pFSQuad = std::make_shared<vk_utils::FSQuad>();
-    m_pFSQuad->Create(device, VkExtent2D{WIDTH, HEIGHT}, screen.swapChainImageFormat, "shaders/quad_vert.spv", "shaders/quad_frag.spv");
+    m_pFSQuad->Create(device, "shaders/quad_vert.spv", "shaders/quad_frag.spv", 
+                      vk_utils::RenderTargetInfo2D{ VkExtent2D{ WIDTH, HEIGHT }, screen.swapChainImageFormat, 
+                                                    VK_ATTACHMENT_LOAD_OP_LOAD, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR });
   
     CreateSyncObjects(device, &m_sync);
 
@@ -450,7 +452,7 @@ private:
     //
     m_pTerrainMesh = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
     m_pTeapotMesh  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
-    m_pLucyMesh    = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
+    m_pBunnyMesh    = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
 
     auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
     auto teapData = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
@@ -461,7 +463,7 @@ private:
 
     auto memReq1 = m_pTerrainMesh->CreateBuffers(device, int(meshData.VerticesNum()), int(meshData.IndicesNum())); // what if memReq1 and memReq2 differs in memoryTypeBits ... ? )
     auto memReq2 = m_pTeapotMesh->CreateBuffers (device, int(teapData.VerticesNum()), int(teapData.IndicesNum())); //
-    auto memReq3 = m_pLucyMesh->CreateBuffers   (device, int(lucyData.VerticesNum()), int(lucyData.IndicesNum())); //
+    auto memReq3 = m_pBunnyMesh->CreateBuffers   (device, int(lucyData.VerticesNum()), int(lucyData.IndicesNum())); //
 
     assert(memReq1.memoryTypeBits == memReq2.memoryTypeBits); // assume this in our simple demo
     assert(memReq1.memoryTypeBits == memReq3.memoryTypeBits); // assume this in our simple demo
@@ -478,11 +480,11 @@ private:
 
     m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
     m_pTeapotMesh->BindBuffers (m_memAllMeshes, memReq1.size);
-    m_pLucyMesh->BindBuffers   (m_memAllMeshes, memReq1.size + memReq2.size);
+    m_pBunnyMesh->BindBuffers   (m_memAllMeshes, memReq1.size + memReq2.size);
 
     m_pTerrainMesh->UpdateBuffers(meshData, m_pCopyHelper.get());
     m_pTeapotMesh->UpdateBuffers (teapData, m_pCopyHelper.get());
-    m_pLucyMesh->UpdateBuffers   (lucyData, m_pCopyHelper.get()); 
+    m_pBunnyMesh->UpdateBuffers   (lucyData, m_pCopyHelper.get()); 
 
     CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
                            &pipelineLayout, &graphicsPipeline);
@@ -538,7 +540,7 @@ private:
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
     m_pTeapotMesh  = nullptr;
-    m_pLucyMesh    = nullptr;
+    m_pBunnyMesh    = nullptr;
     m_pFSQuad      = nullptr;
 
     // free our vbos
@@ -950,7 +952,7 @@ private:
       }
 
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
-      m_pLucyMesh->DrawCmd(a_cmdBuff);
+      m_pBunnyMesh->DrawCmd(a_cmdBuff);
 
       vkCmdEndRenderPass(a_cmdBuff);
     }
@@ -958,7 +960,7 @@ private:
     if(g_input.drawFSQuad)
     {
       float scaleAndOffset[4] = {0.5f, 0.5f, -0.5f, +0.5f};
-      m_pFSQuad->AssignRenderTarget(a_targetImageView, WIDTH, HEIGHT);
+      m_pFSQuad->SetRenderTarget(a_targetImageView, WIDTH, HEIGHT);
       m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSet[0], scaleAndOffset);
     }
 
