@@ -14,9 +14,9 @@ vk_texture::SimpleTexture2D::~SimpleTexture2D()
   if (m_device == nullptr)
     return;
 
-  vkDestroyImage    (m_device, imageGPU, NULL);     imageGPU = nullptr;
-  vkDestroyImageView(m_device, imageView, NULL);    imageView = nullptr;
-  vkDestroySampler  (m_device, imageSampler, NULL); imageSampler = nullptr;
+  vkDestroyImage    (m_device, m_image, NULL);     m_image = nullptr;
+  vkDestroyImageView(m_device, m_view, NULL);    m_view = nullptr;
+  vkDestroySampler  (m_device, m_sampler, NULL); m_sampler = nullptr;
 
   m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   m_currentStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -46,10 +46,10 @@ VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device,
   imgCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   imgCreateInfo.arrayLayers   = 1;
 
-  VK_CHECK_RESULT(vkCreateImage(a_device, &imgCreateInfo, nullptr, &imageGPU));
+  VK_CHECK_RESULT(vkCreateImage(a_device, &imgCreateInfo, nullptr, &m_image));
 
   VkMemoryRequirements memoryRequirements;
-  vkGetImageMemoryRequirements(a_device, imageGPU, &memoryRequirements);
+  vkGetImageMemoryRequirements(a_device, m_image, &memoryRequirements);
 
   VkSamplerCreateInfo samplerInfo = {};
   {
@@ -71,40 +71,47 @@ VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device,
     samplerInfo.borderColor      = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
   }
-  VK_CHECK_RESULT(vkCreateSampler(a_device, &samplerInfo, nullptr, &this->imageSampler));
+  VK_CHECK_RESULT(vkCreateSampler(a_device, &samplerInfo, nullptr, &this->m_sampler));
 
   m_createImageInfo = imgCreateInfo;
 
   return memoryRequirements;
 }
 
-void vk_texture::SimpleTexture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
+
+static void BindImageToMemoryAndCreateImageView(VkDevice a_device, VkImage a_image, VkFormat a_format, uint32_t a_mipLevels, 
+                                                VkDeviceMemory a_memStorage, size_t a_offset,
+                                                VkImageView* a_pView)
 {
-  assert(memStorage == nullptr); // this implementation does not allow to rebind memory!
-  assert(imageView  == nullptr); // may be later ... 
-
-  memStorage = a_memStorage;
-
-  VK_CHECK_RESULT(vkBindImageMemory(m_device, imageGPU, a_memStorage, a_offset));
+  VK_CHECK_RESULT(vkBindImageMemory(a_device, a_image, a_memStorage, a_offset));
 
   VkImageViewCreateInfo imageViewInfo = {};
   {
     imageViewInfo.sType      = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     imageViewInfo.flags      = 0;
     imageViewInfo.viewType   = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewInfo.format     = m_format;
+    imageViewInfo.format     = a_format;
     imageViewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
-    // The subresource range describes the set of mip levels (and array layers) that can be accessed through this image view
-    // It's possible to create multiple image views for a single image referring to different (and/or overlapping) ranges of the image
     imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
     imageViewInfo.subresourceRange.baseMipLevel   = 0;
     imageViewInfo.subresourceRange.baseArrayLayer = 0;
     imageViewInfo.subresourceRange.layerCount     = 1;
-    imageViewInfo.subresourceRange.levelCount     = m_mipLevels;
-    // The view will be based on the texture's image
-    imageViewInfo.image = this->imageGPU;
+    imageViewInfo.subresourceRange.levelCount     = a_mipLevels;
+    imageViewInfo.image = a_image;     // The view will be based on the texture's image
   }
-  VK_CHECK_RESULT(vkCreateImageView(m_device, &imageViewInfo, nullptr, &this->imageView));
+  VK_CHECK_RESULT(vkCreateImageView(a_device, &imageViewInfo, nullptr, a_pView));
+}
+
+void vk_texture::SimpleTexture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
+{
+  assert(m_memStorage == nullptr); // this implementation does not allow to rebind memory!
+  assert(m_view       == nullptr); // may be later ... 
+
+  m_memStorage = a_memStorage;
+
+  BindImageToMemoryAndCreateImageView(m_device, m_image, m_format, m_mipLevels,
+                                      a_memStorage, a_offset,
+                                      &m_view);
 }
 
 void vk_texture::SimpleTexture2D::Update(const void* a_src, int a_width, int a_height, int a_bpp, ICopyEngine* a_pCopyImpl)
@@ -262,7 +269,7 @@ void vk_texture::SimpleTexture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff)
     imgBar.dstAccessMask = 0;
     imgBar.oldLayout     = m_currentLayout;
     imgBar.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    imgBar.image         = imageGPU;
+    imgBar.image         = m_image;
   
     imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
     imgBar.subresourceRange.baseMipLevel   = 0;
@@ -310,7 +317,7 @@ void vk_texture::SimpleTexture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff)
     // Transition current mip level to transfer dest
     vk_utils::setImageLayout(
             blitCmd,
-            imageGPU,
+            m_image,
             VK_IMAGE_LAYOUT_UNDEFINED,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             mipSubRange,
@@ -320,9 +327,9 @@ void vk_texture::SimpleTexture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff)
     // Blit from previous level
     vkCmdBlitImage(
             blitCmd,
-            imageGPU,
+            m_image,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            imageGPU,
+            m_image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
             &imageBlit,
@@ -331,7 +338,7 @@ void vk_texture::SimpleTexture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff)
     // Transition current mip level to transfer source for read in next iteration
     vk_utils::setImageLayout(
             blitCmd,
-            imageGPU,
+            m_image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             mipSubRange,
@@ -355,7 +362,7 @@ void vk_texture::SimpleTexture2D::GenerateMipsCmd(VkCommandBuffer a_cmdBuff)
     imgBar.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     imgBar.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     imgBar.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imgBar.image         = imageGPU;
+    imgBar.image         = m_image;
   
     imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
     imgBar.subresourceRange.baseMipLevel   = 0;
@@ -392,7 +399,7 @@ void vk_texture::SimpleTexture2D::ChangeLayoutCmd(VkCommandBuffer a_cmdBuff, VkI
   imgBar.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;                // #NOTE: THIS IS NOT CORRECT! please use vk_utils::setImageLayout!
   imgBar.oldLayout           = m_currentLayout;
   imgBar.newLayout           = a_newLayout;
-  imgBar.image               = imageGPU;
+  imgBar.image               = m_image;
 
   imgBar.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
   imgBar.subresourceRange.baseMipLevel   = 0;
@@ -411,3 +418,99 @@ void vk_texture::SimpleTexture2D::ChangeLayoutCmd(VkCommandBuffer a_cmdBuff, VkI
   m_currentLayout = a_newLayout;
   m_currentStage  = a_newStage;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+vk_texture::RenderableTexture2D::~RenderableTexture2D()
+{
+  if (m_device == nullptr)
+    return;
+
+  vkDestroyImage    (m_device, m_image, NULL);   m_image   = nullptr;
+  vkDestroyImageView(m_device, m_view, NULL);    m_view    = nullptr;
+  vkDestroySampler  (m_device, m_sampler, NULL); m_sampler = nullptr;
+
+  m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  m_currentStage  = 0;
+}
+
+static inline bool IsDepthFormat(VkFormat a_format)
+{
+  return (a_format == VK_FORMAT_D32_SFLOAT);
+}
+
+VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
+{
+  m_device = a_device;
+  m_width  = a_width;
+  m_height = a_height;
+  m_format = a_format;
+
+  m_mipLevels = 0;
+
+  auto attachmentFlags = IsDepthFormat(a_format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+  VkImageCreateInfo imgCreateInfo = {};
+  imgCreateInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  imgCreateInfo.pNext         = nullptr;
+  imgCreateInfo.flags         = 0; // not sure about this ...
+  imgCreateInfo.imageType     = VK_IMAGE_TYPE_2D;
+  imgCreateInfo.format        = a_format;
+  imgCreateInfo.extent        = VkExtent3D{ uint32_t(a_width), uint32_t(a_height), 1 };
+  imgCreateInfo.mipLevels     = m_mipLevels;
+  imgCreateInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
+  imgCreateInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+  imgCreateInfo.usage         = attachmentFlags | VK_IMAGE_USAGE_SAMPLED_BIT; // copy to the texture and read then
+  imgCreateInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+  imgCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  imgCreateInfo.arrayLayers   = 1;
+
+  VK_CHECK_RESULT(vkCreateImage(a_device, &imgCreateInfo, nullptr, &m_image));
+
+  VkMemoryRequirements memoryRequirements;
+  vkGetImageMemoryRequirements(a_device, m_image, &memoryRequirements);
+
+  VkSamplerCreateInfo samplerInfo = {};
+  {
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.pNext = nullptr;
+    samplerInfo.flags = 0;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
+    samplerInfo.minLod = 0;
+    samplerInfo.maxLod = float(m_mipLevels);
+    samplerInfo.maxAnisotropy = 1.0;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+  }
+  VK_CHECK_RESULT(vkCreateSampler(a_device, &samplerInfo, nullptr, &this->m_sampler));
+
+  m_createImageInfo = imgCreateInfo;
+
+  return memoryRequirements;
+}
+
+void vk_texture::RenderableTexture2D::BindMemory(VkDeviceMemory a_memStorage, size_t a_offset)
+{
+  assert(m_memStorage == nullptr); // this implementation does not allow to rebind memory!
+  assert(m_view       == nullptr); // may be later ... 
+
+  m_memStorage = a_memStorage;
+
+  BindImageToMemoryAndCreateImageView(m_device, m_image, m_format, m_mipLevels,
+                                      a_memStorage, a_offset,
+                                      &m_view);
+}
+
+
+

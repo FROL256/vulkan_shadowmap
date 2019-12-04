@@ -27,7 +27,7 @@ namespace vk_texture
 
   struct SimpleTexture2D
   {
-    SimpleTexture2D() : memStorage(0), imageGPU(0), imageSampler(0), imageView(0) {}
+    SimpleTexture2D() : m_memStorage(0), m_image(0), m_sampler(0), m_view(0) {}
     ~SimpleTexture2D();
    
     //// useful functions
@@ -41,9 +41,9 @@ namespace vk_texture
     
     //// information functions
     //
-    VkImage              Image()      const { return imageGPU;     }
-    VkImageView          View()       const { return imageView;    }
-    VkSampler            Sampler()    const { return imageSampler; }
+    VkImage              Image()      const { return m_image;     }
+    VkImageView          View()       const { return m_view;    }
+    VkSampler            Sampler()    const { return m_sampler; }
 
     VkImageCreateInfo    Info()       const { return m_createImageInfo; }
     int                  Width()      const { return m_width;  }
@@ -55,10 +55,10 @@ namespace vk_texture
 
   protected:
 
-    VkDeviceMemory memStorage; // SimpleVulkanTexture DOES NOT OWN memStorage! It just save reference to it.
-    VkImage        imageGPU;
-    VkSampler      imageSampler;
-    VkImageView    imageView;
+    VkDeviceMemory m_memStorage; // SimpleVulkanTexture DOES NOT OWN memStorage! It just save reference to it.
+    VkImage        m_image;
+    VkSampler      m_sampler;
+    VkImageView    m_view;
     VkDevice       m_device;
     VkFormat       m_format;
     int m_width, m_height;
@@ -72,7 +72,48 @@ namespace vk_texture
   };
 
 
-  
+  struct RenderableTexture2D
+  {
+    RenderableTexture2D() : m_memStorage(0), m_image(0), m_sampler(0), m_view(0) { }
+    ~RenderableTexture2D();
+
+    //// useful functions
+    //
+    VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
+    void                 BindMemory(VkDeviceMemory a_memStorage, size_t a_offset);
+
+
+    //// information functions
+    //
+    VkImage              Image()      const { return m_image; }
+    VkImageView          View()       const { return m_view; }
+    VkSampler            Sampler()    const { return m_sampler; }
+
+    VkImageCreateInfo    Info()       const { return m_createImageInfo; }
+    int                  Width()      const { return m_width; }
+    int                  Height()     const { return m_height; }
+    VkFormat             Format()     const { return m_format; }
+
+    VkImageLayout        Layout()     const { return m_currentLayout; }
+    VkPipelineStageFlags Stage()      const { return m_currentStage; }
+
+  protected:
+
+    VkDeviceMemory m_memStorage; // RenderableTexture2D DOES NOT OWN memStorage! It just save reference to it.
+    VkImage        m_image;
+    VkSampler      m_sampler;
+    VkImageView    m_view;
+    VkDevice       m_device;
+    VkFormat       m_format;
+    int m_width,   m_height;
+    int m_mipLevels;
+
+    VkImageCreateInfo  m_createImageInfo;
+
+    VkImageLayout        m_currentLayout;
+    VkPipelineStageFlags m_currentStage;
+
+  };
 
 };
 
