@@ -625,3 +625,53 @@ void vk_utils::CreateDepthTexture(VkDevice a_device, VkPhysicalDevice a_physDevi
     
   VK_CHECK_RESULT(vkCreateImageView(a_device, &imageViewInfo, nullptr, a_imageView));
 }
+
+void vk_utils::CreateRenderPass(VkDevice a_device, RenderTargetInfo2D a_rtInfo,
+                                VkRenderPass* a_pRenderPass)
+{
+  const bool isDepthTexture   = vk_utils::IsDepthFormat(a_rtInfo.fmt);
+
+  VkAttachmentDescription colorAttachment = {};
+  colorAttachment.format         = a_rtInfo.fmt;
+  colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
+  colorAttachment.loadOp         = a_rtInfo.loadOp;
+  colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+  colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  colorAttachment.initialLayout  = a_rtInfo.initialLayout;           //  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL/VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL ? 
+  colorAttachment.finalLayout    = a_rtInfo.finalLayout;
+
+  VkAttachmentReference colorAttachmentRef = {};
+  colorAttachmentRef.attachment = 0;
+  colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  VkSubpassDescription subpass = {};
+  subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount = 1;
+  subpass.pColorAttachments    = &colorAttachmentRef;
+
+  VkSubpassDependency dependency = {};
+  dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+  dependency.dstSubpass    = 0;
+  dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.srcAccessMask = 0;
+  dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+  VkRenderPassCreateInfo renderPassInfo = {};
+  renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  renderPassInfo.attachmentCount = 1;
+  renderPassInfo.pAttachments    = &colorAttachment;
+  renderPassInfo.subpassCount    = 1;
+  renderPassInfo.pSubpasses      = &subpass;
+  renderPassInfo.dependencyCount = 1;
+  renderPassInfo.pDependencies   = &dependency;
+
+  if (vkCreateRenderPass(a_device, &renderPassInfo, nullptr, a_pRenderPass) != VK_SUCCESS)
+    throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
+}
+
+bool vk_utils::IsDepthFormat(VkFormat a_format)
+{
+  return (a_format == VK_FORMAT_D32_SFLOAT);
+}

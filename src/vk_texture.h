@@ -27,7 +27,7 @@ namespace vk_texture
 
   struct SimpleTexture2D
   {
-    SimpleTexture2D() : m_memStorage(0), m_image(0), m_sampler(0), m_view(0) {}
+    SimpleTexture2D() : m_memStorage(0), m_image(0), m_sampler(0), m_view(0), m_device(0) {}
     ~SimpleTexture2D();
    
     //// useful functions
@@ -74,7 +74,8 @@ namespace vk_texture
 
   struct RenderableTexture2D
   {
-    RenderableTexture2D() : m_memStorage(0), m_image(0), m_sampler(0), m_view(0) { }
+    RenderableTexture2D() : m_memStorage(0), m_image(0), m_sampler(0), m_view(0), m_fbo(0), m_device(0), 
+                            m_renderPass(0) { }
     ~RenderableTexture2D();
 
     //// useful functions
@@ -103,12 +104,16 @@ namespace vk_texture
     VkImage        m_image;
     VkSampler      m_sampler;
     VkImageView    m_view;
+
+    VkRenderPass   m_renderPass;
+    VkFramebuffer  m_fbo;
+
     VkDevice       m_device;
     VkFormat       m_format;
     int m_width,   m_height;
     int m_mipLevels;
 
-    VkImageCreateInfo  m_createImageInfo;
+    VkImageCreateInfo    m_createImageInfo;
 
     VkImageLayout        m_currentLayout;
     VkPipelineStageFlags m_currentStage;

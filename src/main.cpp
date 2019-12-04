@@ -189,6 +189,7 @@ private:
 
   VkDeviceMemory        m_memAllMeshes   = nullptr; //
   VkDeviceMemory        m_memAllTextures = nullptr;
+  VkDeviceMemory        m_memShadowMap   = nullptr;
 
   struct SyncObj
   {
@@ -222,7 +223,7 @@ private:
   std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
   std::shared_ptr<vk_texture::SimpleTexture2D> m_pTex1, m_pTex2, m_pTex3;
-
+  std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -391,18 +392,21 @@ private:
     if (data3.size() == 0)
       RUN_TIME_ERROR("data/metal.bmp | NOT FOUND!");
 
+    m_pTex1      = std::make_shared<vk_texture::SimpleTexture2D>();
+    m_pTex2      = std::make_shared<vk_texture::SimpleTexture2D>();
+    m_pTex3      = std::make_shared<vk_texture::SimpleTexture2D>();
+    m_pShadowMap = std::make_shared<vk_texture::RenderableTexture2D>();
 
-    m_pTex1    = std::make_shared<vk_texture::SimpleTexture2D>();
-    m_pTex2    = std::make_shared<vk_texture::SimpleTexture2D>();
-    m_pTex3    = std::make_shared<vk_texture::SimpleTexture2D>();
-    
     auto memReqTex1 = m_pTex1->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex2 = m_pTex2->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex3 = m_pTex3->CreateImage(device, w3, h3, VK_FORMAT_R8G8B8A8_UNORM);
+    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D32_SFLOAT);
 
     assert(memReqTex1.memoryTypeBits == memReqTex2.memoryTypeBits);
     assert(memReqTex1.memoryTypeBits == memReqTex3.memoryTypeBits);
-
+    //assert(memReqTex1.memoryTypeBits == memReqTex4.memoryTypeBits); // well, usually not, please make separate allocation for shadow map :)
+    
+    // memory for all read-only textures
     {
       VkMemoryAllocateInfo allocateInfo = {};
       allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -413,10 +417,22 @@ private:
       VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllTextures));
     }
 
+    // memory for all shadowmaps (well, if you have them more than 1 ...)
+    {
+      VkMemoryAllocateInfo allocateInfo = {};
+      allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocateInfo.pNext           = nullptr;
+      allocateInfo.allocationSize  = memReqTex4.size;
+      allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReqTex4.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice);
+
+      VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memShadowMap));
+    }
+
     m_pTex1->BindMemory(m_memAllTextures, 0);
     m_pTex2->BindMemory(m_memAllTextures, memReqTex1.size);
     m_pTex3->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size);
-    
+    m_pShadowMap->BindMemory(m_memShadowMap, 0);
+
     VkSampler samplers[] = { m_pTex1->Sampler(), m_pTex2->Sampler(), m_pTex3->Sampler()};
     VkImageView views [] = { m_pTex1->View(),    m_pTex2->View(), m_pTex3->View()      };
 
@@ -532,7 +548,7 @@ private:
 
   void Cleanup() 
   { 
-
+    m_pShadowMap = nullptr;
     m_pTex1 = nullptr;        // smart pointer will destroy resources
     m_pTex2 = nullptr;
     m_pTex3 = nullptr;
@@ -548,6 +564,9 @@ private:
 
     if(m_memAllTextures != nullptr)
       vkFreeMemory(device, m_memAllTextures, NULL);
+
+    if(m_memShadowMap != nullptr)
+      vkFreeMemory(device, m_memShadowMap, NULL);
 
     if(depthImageMemory != nullptr)
     {

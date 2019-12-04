@@ -2,21 +2,10 @@
 #define VULKAN_FSQUAD_H
 
 #include <vulkan/vulkan.h>
+#include "vk_utils.h"
 
 namespace vk_utils
 {
-  /**
-  \brief This struction contain enough info for enabling render-to-texture in Vulkan and creating all additional Vulkan objects
-  */
-  struct RenderTargetInfo2D
-  {
-    VkExtent2D         size;           //!< image resolution
-    VkFormat           fmt;            //!< image format 
-    VkAttachmentLoadOp loadOp;         //!< information for renderpass
-    VkImageLayout      initialLayout;  //!< information for renderpass
-    VkImageLayout      finalLayout;    //!< information for renderpass
-  };
-
   /**
   \brief simple helper for drawing textured quads (2D rectangles) on screen 
   */

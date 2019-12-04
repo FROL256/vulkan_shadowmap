@@ -78,12 +78,15 @@ VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device,
   return memoryRequirements;
 }
 
+//VK_IMAGE_ASPECT_DEPTH_BIT 
 
 static void BindImageToMemoryAndCreateImageView(VkDevice a_device, VkImage a_image, VkFormat a_format, uint32_t a_mipLevels, 
                                                 VkDeviceMemory a_memStorage, size_t a_offset,
                                                 VkImageView* a_pView)
 {
   VK_CHECK_RESULT(vkBindImageMemory(a_device, a_image, a_memStorage, a_offset));
+
+  const bool isDepthTexture = vk_utils::IsDepthFormat(a_format);
 
   VkImageViewCreateInfo imageViewInfo = {};
   {
@@ -92,7 +95,7 @@ static void BindImageToMemoryAndCreateImageView(VkDevice a_device, VkImage a_ima
     imageViewInfo.viewType   = VK_IMAGE_VIEW_TYPE_2D;
     imageViewInfo.format     = a_format;
     imageViewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
-    imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageViewInfo.subresourceRange.aspectMask     = isDepthTexture ? VK_IMAGE_ASPECT_DEPTH_BIT :  VK_IMAGE_ASPECT_COLOR_BIT;
     imageViewInfo.subresourceRange.baseMipLevel   = 0;
     imageViewInfo.subresourceRange.baseArrayLayer = 0;
     imageViewInfo.subresourceRange.layerCount     = 1;
@@ -429,18 +432,20 @@ vk_texture::RenderableTexture2D::~RenderableTexture2D()
   if (m_device == nullptr)
     return;
 
-  vkDestroyImage    (m_device, m_image, NULL);   m_image   = nullptr;
-  vkDestroyImageView(m_device, m_view, NULL);    m_view    = nullptr;
-  vkDestroySampler  (m_device, m_sampler, NULL); m_sampler = nullptr;
+  //vkDestroyPipeline(m_device, m_pipeline, nullptr);
+  //vkDestroyPipelineLayout(m_device, m_layout, nullptr);
+  vkDestroyRenderPass (m_device, m_renderPass, nullptr);
+  vkDestroyFramebuffer(m_device, m_fbo, NULL);
+
+
+  vkDestroyImage      (m_device, m_image, NULL);   m_image   = nullptr;
+  vkDestroyImageView  (m_device, m_view, NULL);    m_view    = nullptr;
+  vkDestroySampler    (m_device, m_sampler, NULL); m_sampler = nullptr;
 
   m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   m_currentStage  = 0;
 }
 
-static inline bool IsDepthFormat(VkFormat a_format)
-{
-  return (a_format == VK_FORMAT_D32_SFLOAT);
-}
 
 VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
 {
@@ -449,9 +454,10 @@ VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_dev
   m_height = a_height;
   m_format = a_format;
 
-  m_mipLevels = 0;
+  m_mipLevels = 1;
 
-  auto attachmentFlags = IsDepthFormat(a_format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  const bool isDepthTexture  = vk_utils::IsDepthFormat(a_format);
+  const auto attachmentFlags = isDepthTexture ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
   VkImageCreateInfo imgCreateInfo = {};
   imgCreateInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -475,22 +481,22 @@ VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_dev
 
   VkSamplerCreateInfo samplerInfo = {};
   {
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.pNext = nullptr;
-    samplerInfo.flags = 0;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
-    samplerInfo.minLod = 0;
-    samplerInfo.maxLod = float(m_mipLevels);
-    samplerInfo.maxAnisotropy = 1.0;
+    samplerInfo.sType            = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.pNext            = nullptr;
+    samplerInfo.flags            = 0;
+    samplerInfo.magFilter        = VK_FILTER_LINEAR;
+    samplerInfo.minFilter        = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode       = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU     = isDepthTexture ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV     = isDepthTexture ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;;
+    samplerInfo.addressModeW     = isDepthTexture ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;;
+    samplerInfo.mipLodBias       = 0.0f;
+    samplerInfo.compareOp        = VK_COMPARE_OP_NEVER;
+    samplerInfo.minLod           = 0;
+    samplerInfo.maxLod           = float(m_mipLevels);
+    samplerInfo.maxAnisotropy    = 1.0;
     samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    samplerInfo.borderColor      = isDepthTexture ? VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK : VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
   }
   VK_CHECK_RESULT(vkCreateSampler(a_device, &samplerInfo, nullptr, &this->m_sampler));
@@ -510,6 +516,37 @@ void vk_texture::RenderableTexture2D::BindMemory(VkDeviceMemory a_memStorage, si
   BindImageToMemoryAndCreateImageView(m_device, m_image, m_format, m_mipLevels,
                                       a_memStorage, a_offset,
                                       &m_view);
+
+  const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
+
+  // render pass
+  //
+  vk_utils::RenderTargetInfo2D rtInfo;
+  rtInfo.size.width    = m_width;
+  rtInfo.size.height   = m_height;
+  rtInfo.fmt           = m_format;
+  rtInfo.loadOp        = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  rtInfo.initialLayout = isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  rtInfo.finalLayout   = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+  vk_utils::CreateRenderPass(m_device, rtInfo,
+                             &m_renderPass);
+
+  // frame buffer objects
+  //
+  VkImageView attachments[] = { m_view };
+
+  VkFramebufferCreateInfo framebufferInfo = {};
+  framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  framebufferInfo.renderPass      = m_renderPass;
+  framebufferInfo.attachmentCount = 1;
+  framebufferInfo.pAttachments    = attachments;
+  framebufferInfo.width           = m_width;
+  framebufferInfo.height          = m_height;
+  framebufferInfo.layers          = 1;
+
+  if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_fbo) != VK_SUCCESS)
+    throw std::runtime_error("[RenderableTexture2D]: failed to create framebuffer!");
 }
 
 

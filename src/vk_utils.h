@@ -68,6 +68,24 @@ namespace vk_utils
   VkShaderModule CreateShaderModule(VkDevice a_device, const std::vector<uint32_t>& code);
 
   void ExecuteCommandBufferNow(VkCommandBuffer a_cmdBuff, VkQueue a_queue, VkDevice a_device);
+
+
+  /**
+  \brief This struction contain enough info for enabling render-to-texture in Vulkan and creating all additional Vulkan objects
+  */
+  struct RenderTargetInfo2D
+  {
+    VkExtent2D         size;           //!< image resolution
+    VkFormat           fmt;            //!< image format 
+    VkAttachmentLoadOp loadOp;         //!< information for renderpass
+    VkImageLayout      initialLayout;  //!< information for renderpass
+    VkImageLayout      finalLayout;    //!< information for renderpass
+  };
+
+  void CreateRenderPass(VkDevice a_device, RenderTargetInfo2D a_rtInfo,
+                        VkRenderPass* a_pRenderPass);
+
+  bool IsDepthFormat(VkFormat a_format);
 };
 
 #undef  RUN_TIME_ERROR
