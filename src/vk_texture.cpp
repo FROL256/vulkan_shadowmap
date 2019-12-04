@@ -388,8 +388,8 @@ void vk_texture::SimpleTexture2D::ChangeLayoutCmd(VkCommandBuffer a_cmdBuff, VkI
   imgBar.pNext               = nullptr;
   imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   imgBar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  imgBar.srcAccessMask       = 0;
-  imgBar.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+  imgBar.srcAccessMask       = 0;                                        // #NOTE: THIS IS NOT CORRECT! please use vk_utils::setImageLayout!
+  imgBar.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT;                // #NOTE: THIS IS NOT CORRECT! please use vk_utils::setImageLayout!
   imgBar.oldLayout           = m_currentLayout;
   imgBar.newLayout           = a_newLayout;
   imgBar.image               = imageGPU;

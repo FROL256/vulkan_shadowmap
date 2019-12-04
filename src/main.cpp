@@ -423,9 +423,9 @@ private:
     CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, 3,
                                   &descriptorPool, descriptorSet);
 
-    m_pTex1->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex1 in transfer_dst
-    m_pTex2->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex2 in transfer_dst
-    m_pTex3->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex3 in transfer_dst
+    m_pTex1->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex1 in transfer_dst layout
+    m_pTex2->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex2 in transfer_dst layout
+    m_pTex3->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex3 in transfer_dst layout
     
     // generate all mips
     //
@@ -439,9 +439,9 @@ private:
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      m_pTex1->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex1 in shader read optimal
-      m_pTex2->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex2 in shader read optimal
-      m_pTex3->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex3 in shader read optimal
+      m_pTex1->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex1 in shader_read layout
+      m_pTex2->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex2 in shader_read layout
+      m_pTex3->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex3 in shader_read layout 
      
       vkEndCommandBuffer(cmdBuff);
 
@@ -452,7 +452,7 @@ private:
     //
     m_pTerrainMesh = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
     m_pTeapotMesh  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
-    m_pBunnyMesh    = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
+    m_pBunnyMesh   = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
 
     auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
     auto teapData = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
@@ -960,7 +960,7 @@ private:
     if(g_input.drawFSQuad)
     {
       float scaleAndOffset[4] = {0.5f, 0.5f, -0.5f, +0.5f};
-      m_pFSQuad->SetRenderTarget(a_targetImageView, WIDTH, HEIGHT);
+      m_pFSQuad->SetRenderTarget(a_targetImageView);
       m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSet[0], scaleAndOffset);
     }
 

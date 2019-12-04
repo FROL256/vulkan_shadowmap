@@ -222,7 +222,7 @@ void vk_geom::CompactMesh_T3V4x2F::DrawCmd(VkCommandBuffer a_cmdBuff)
   for(auto& offs : offsets) 
     offs = 0;
   
-  vkCmdBindVertexBuffers(a_cmdBuff, 0, vertexBuffers.size(), vertexBuffers.data(), offsets.data());
+  vkCmdBindVertexBuffers(a_cmdBuff, 0, uint32_t(vertexBuffers.size()), vertexBuffers.data(), offsets.data());
   vkCmdBindIndexBuffer  (a_cmdBuff, indexBuffer, 0, this->IndexType());
-  vkCmdDrawIndexed      (a_cmdBuff, this->IndicesNum(), 1, 0, 0, 0);
+  vkCmdDrawIndexed      (a_cmdBuff, uint32_t(IndicesNum()), 1, 0, 0, 0);
 }

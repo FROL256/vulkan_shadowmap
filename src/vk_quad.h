@@ -5,15 +5,21 @@
 
 namespace vk_utils
 {
+  /**
+  \brief This struction contain enough info for enabling render-to-texture in Vulkan and creating all additional Vulkan objects
+  */
   struct RenderTargetInfo2D
   {
-    VkExtent2D         size;
-    VkFormat           fmt;
-    VkAttachmentLoadOp loadOp;      
-    VkImageLayout      initialLayout; 
-    VkImageLayout      finalLayout; 
+    VkExtent2D         size;           //!< image resolution
+    VkFormat           fmt;            //!< image format 
+    VkAttachmentLoadOp loadOp;         //!< information for renderpass
+    VkImageLayout      initialLayout;  //!< information for renderpass
+    VkImageLayout      finalLayout;    //!< information for renderpass
   };
 
+  /**
+  \brief simple helper for drawing textured quads (2D rectangles) on screen 
+  */
   struct FSQuad
   {
     FSQuad() : m_pipeline(nullptr), m_layout(nullptr),  m_renderPass(nullptr), m_fbTarget(nullptr),
@@ -21,10 +27,35 @@ namespace vk_utils
 
     virtual ~FSQuad();
 
-    void Create(VkDevice a_device, const char* a_vspath, const char* a_fspath, RenderTargetInfo2D a_rtInfo);
-    void SetRenderTarget(VkImageView a_imageView, int a_width, int a_height); 
+    /**
+    \brief Create resources that are needed to draw textured quad
+    \param a_device - input Vulkan logical device
+    \param a_vspath - input path to special quad vertex shader (compiled to SPIR-V)
+    \param a_fspath - input path to quad fragment shader       (compiled to SPIR-V)
+    \param a_rtInfo - input render target info; you shoud specify it due to Vulkan requires a lot of detailsto be specified. 
+                      I. e. you should know a lot in advance about images that you are going to render in to. 
 
-    void DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_textDSet, float* a_offsAndScale = nullptr);
+    */
+    void Create(VkDevice a_device, const char* a_vspath, const char* a_fspath, RenderTargetInfo2D a_rtInfo);
+
+    /**
+    \brief This function allow you to set/change target image that you are going to render in to.
+    \param - input image view of the output image
+
+      The future implementations is assume to have some cache of vulkan frame buffer objects for each input image view
+      The current implementation make new framebuffer for each call of 'SetRenderTarget' (destroying the old one of cource).
+    */
+    void SetRenderTarget(VkImageView a_imageView); 
+
+
+    /**
+    \brief Writes commands of drawing quad
+    \param a_cmdBuff         - output command buffer. 
+    \param a_inTexDescriptor - input descriptor set for texture that will be assigned to a quad; it is assumed that user will create descriptor for current ... 
+    \param a_offsAndScale    - input array of packed scale ([0],[1]) and offset ([2],[3]);
+   
+    */
+    void DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_inTexDescriptor, float a_offsAndScale[4]);
 
   protected:
 
@@ -43,6 +74,7 @@ namespace vk_utils
     // this is for binding texture
     //
     VkDescriptorSetLayout m_dlayout;
+    RenderTargetInfo2D    m_rtCreateInfo;
 
   };
 

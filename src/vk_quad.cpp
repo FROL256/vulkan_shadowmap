@@ -71,8 +71,9 @@ vk_utils::FSQuad::~FSQuad()
 
 void vk_utils::FSQuad::Create(VkDevice a_device, const char* a_vspath, const char* a_fspath, RenderTargetInfo2D a_rtInfo)
 {
-  m_device     = a_device;
-  m_fbSize     = a_rtInfo.size;
+  m_device       = a_device;
+  m_fbSize       = a_rtInfo.size;
+  m_rtCreateInfo = a_rtInfo;
   
   auto vertShaderCode = vk_utils::ReadFile(a_vspath);
   auto fragShaderCode = vk_utils::ReadFile(a_fspath);
@@ -220,7 +221,7 @@ void vk_utils::FSQuad::Create(VkDevice a_device, const char* a_vspath, const cha
   vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
 }
 
-void vk_utils::FSQuad::SetRenderTarget(VkImageView a_imageView, int a_width, int a_height)
+void vk_utils::FSQuad::SetRenderTarget(VkImageView a_imageView)
 {
   if(m_fbTarget != nullptr)
     vkDestroyFramebuffer(m_device, m_fbTarget, NULL);
@@ -234,8 +235,8 @@ void vk_utils::FSQuad::SetRenderTarget(VkImageView a_imageView, int a_width, int
   framebufferInfo.renderPass      = m_renderPass;
   framebufferInfo.attachmentCount = 1;
   framebufferInfo.pAttachments    = attachments;
-  framebufferInfo.width           = uint32_t(a_width);
-  framebufferInfo.height          = uint32_t(a_height);
+  framebufferInfo.width           = m_rtCreateInfo.size.width;
+  framebufferInfo.height          = m_rtCreateInfo.size.height;
   framebufferInfo.layers          = 1;  
 
   if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_fbTarget) != VK_SUCCESS)
@@ -244,7 +245,7 @@ void vk_utils::FSQuad::SetRenderTarget(VkImageView a_imageView, int a_width, int
   m_targetView = a_imageView; 
 }
 
-void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_textDSet, float* a_offsAndScale)
+void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_inTexDescriptor, float a_offsAndScale[4])
 {
   VkRenderPassBeginInfo renderPassInfo = {};
   renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -261,7 +262,7 @@ void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_text
   vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);  
 
   vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-  vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &a_textDSet, 0, NULL);
+  vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &a_inTexDescriptor, 0, NULL);
 
   float scaleAndOffset[4] = {1.0f, 1.0f, 0.0f, 0.0f};
   if(a_offsAndScale != 0)
