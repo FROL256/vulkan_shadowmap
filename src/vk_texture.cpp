@@ -517,20 +517,54 @@ void vk_texture::RenderableTexture2D::BindMemory(VkDeviceMemory a_memStorage, si
                                       a_memStorage, a_offset,
                                       &m_view);
 
-  const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
+  {
+    const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
 
-  // render pass
-  //
-  vk_utils::RenderTargetInfo2D rtInfo;
-  rtInfo.size.width    = m_width;
-  rtInfo.size.height   = m_height;
-  rtInfo.fmt           = m_format;
-  rtInfo.loadOp        = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  rtInfo.initialLayout = isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  rtInfo.finalLayout   = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-  vk_utils::CreateRenderPass(m_device, rtInfo,
-                             &m_renderPass);
+    VkAttachmentDescription colorAttachment = {};
+    colorAttachment.format         = m_format;
+    colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout  = isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  
+    VkAttachmentReference colorAttachmentRef = {};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout     = isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    
+    if(isDepthTexture)
+      subpass.pDepthStencilAttachment = &colorAttachmentRef;
+    else
+    {
+      subpass.colorAttachmentCount = 1;
+      subpass.pColorAttachments    = &colorAttachmentRef;
+    }
+  
+    VkSubpassDependency dependency = {};
+    dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass    = 0;
+    dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  
+    VkRenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments    = &colorAttachment;
+    renderPassInfo.subpassCount    = 1;
+    renderPassInfo.pSubpasses      = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies   = &dependency;
+  
+    if (vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_renderPass) != VK_SUCCESS)
+      throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
+  }
 
   // frame buffer objects
   //

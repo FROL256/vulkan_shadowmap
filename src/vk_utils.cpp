@@ -629,8 +629,6 @@ void vk_utils::CreateDepthTexture(VkDevice a_device, VkPhysicalDevice a_physDevi
 void vk_utils::CreateRenderPass(VkDevice a_device, RenderTargetInfo2D a_rtInfo,
                                 VkRenderPass* a_pRenderPass)
 {
-  const bool isDepthTexture   = vk_utils::IsDepthFormat(a_rtInfo.fmt);
-
   VkAttachmentDescription colorAttachment = {};
   colorAttachment.format         = a_rtInfo.fmt;
   colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
@@ -643,7 +641,7 @@ void vk_utils::CreateRenderPass(VkDevice a_device, RenderTargetInfo2D a_rtInfo,
 
   VkAttachmentReference colorAttachmentRef = {};
   colorAttachmentRef.attachment = 0;
-  colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; 
 
   VkSubpassDescription subpass = {};
   subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
