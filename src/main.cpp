@@ -48,7 +48,8 @@ struct g_input_t
   bool firstMouse   = true;
   bool captureMouse = false;
   bool capturedMouseJustNow = false;
-  bool drawFSQuad = false;
+  bool drawFSQuad   = false;
+  bool controlLight = false;
 
   float lastX,lastY, scrollY;
   float camMoveSpeed     = 1.0f;
@@ -83,6 +84,14 @@ void OnKeyboardPressed(GLFWwindow* window, int key, int scancode, int action, in
 
   case GLFW_KEY_0:
     g_input.drawFSQuad = false;
+    break;  
+
+  case GLFW_KEY_L:
+    g_input.controlLight = true;
+    break;  
+
+  case GLFW_KEY_C:
+    g_input.controlLight = false;
     break;  
 	
   default:
@@ -192,6 +201,23 @@ private:
 
   size_t currentFrame = 0;
   Camera m_cam;
+  struct ShadowMapCam
+  {
+    ShadowMapCam() 
+    {  
+      cam.pos    = LiteMath::float3(10.0f, 10.0f, 10.0f);
+      cam.lookAt = LiteMath::float3(0, 0, 0);
+      cam.up     = LiteMath::float3(0, 1, 0);
+  
+      radius          = 5.0f;
+      lightTargetDist = 20.0f;
+    }
+  
+    float  radius;
+    float  lightTargetDist;
+    Camera cam;
+  
+  } m_light;
   
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   struct CopyEngine : public vk_geom::ICopyEngine, 
@@ -219,12 +245,6 @@ private:
 
   std::shared_ptr<vk_texture::SimpleTexture2D>     m_pTex[TEXTURES_NUM];
   std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
-
-  struct ShadowMapParams
-  {
-    float radius          = 2.0f;
-    float lightTargetDist = 5.0f;
-  }m_shadowMap;
 
   // Descriptors represent resources in shaders. They allow us to use things like
   // uniform buffers, storage buffers and images in GLSL.
@@ -380,7 +400,7 @@ private:
     CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
 
     m_pFSQuad = std::make_shared<vk_utils::FSQuad>();
-    m_pFSQuad->Create(device, "shaders/quad_vert.spv", "shaders/quad_depth.spv", 
+    m_pFSQuad->Create(device, "shaders/quad_vert.spv", "shaders/quad_frag.spv", 
                       vk_utils::RenderTargetInfo2D{ VkExtent2D{ WIDTH, HEIGHT }, screen.swapChainImageFormat, 
                                                     VK_ATTACHMENT_LOAD_OP_LOAD, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR });
   
@@ -550,8 +570,12 @@ private:
       double thisTime = glfwGetTime();
       float diffTime  = float(thisTime - lastTime);
       lastTime        = thisTime;
- 
-      UpdateCamera(m_cam, diffTime);
+      
+      if(g_input.controlLight)
+        UpdateCamera(m_light.cam, diffTime);
+      else
+        UpdateCamera(m_cam, diffTime);
+      
       glfwPollEvents();
       DrawFrame();
 
@@ -975,9 +999,9 @@ private:
 
     VkViewport viewport = {};
     viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = (float)a_width;
-    viewport.height   = (float)a_height;
+    viewport.y        = +(float)a_height;
+    viewport.width    = +(float)a_width;
+    viewport.height   = -(float)a_height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1080,11 +1104,9 @@ private:
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
 
-      const float r = 5.0f;
-
-      auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, -5.0f, 5.0f);
-      //auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, 1.0f, 0.1f, 1000.0f));
-      auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
+      const float r       = m_light.radius;
+      auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, -m_light.lightTargetDist, m_light.lightTargetDist);
+      auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
       auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float3(0,0,0), false, a_layout);
@@ -1116,7 +1138,7 @@ private:
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
       auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
 
-      LiteMath::float3 lightDir = LiteMath::normalize(LiteMath::float3(1, 1, 1));
+      LiteMath::float3 lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightDir, true, a_layout);
 
       vkCmdEndRenderPass(a_cmdBuff);
