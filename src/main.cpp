@@ -220,6 +220,12 @@ private:
   std::shared_ptr<vk_texture::SimpleTexture2D>     m_pTex[TEXTURES_NUM];
   std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
 
+  struct ShadowMapParams
+  {
+    float radius          = 2.0f;
+    float lightTargetDist = 5.0f;
+  }m_shadowMap;
+
   // Descriptors represent resources in shaders. They allow us to use things like
   // uniform buffers, storage buffers and images in GLSL.
   // A single descriptor represents a single resource, and several descriptors are organized
@@ -1074,6 +1080,9 @@ private:
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
 
+      const float r = 5.0f;
+
+      //auto mProj          = LiteMath::transpose(LiteMath::ortoMatrixTransposed(-r, +r, -r, +r, 0.0f, 1000.0f));
       auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, 1.0f, 0.1f, 1000.0f));
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
       auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
