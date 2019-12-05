@@ -409,7 +409,7 @@ private:
     auto memReqTex1 = m_pTex[TERRAIN_TEX]->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex2 = m_pTex[STONE_TEX]->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex3 = m_pTex[METAL_TEX]->CreateImage(device, w3, h3, VK_FORMAT_R8G8B8A8_UNORM);
-    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D32_SFLOAT);
+    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D16_UNORM);
 
     assert(memReqTex1.memoryTypeBits == memReqTex2.memoryTypeBits);
     assert(memReqTex1.memoryTypeBits == memReqTex3.memoryTypeBits);
@@ -1082,7 +1082,7 @@ private:
 
       const float r = 5.0f;
 
-      auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, 0.0f, 10.0f);
+      auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, -5.0f, 5.0f);
       //auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, 1.0f, 0.1f, 1000.0f));
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
       auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
