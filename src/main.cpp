@@ -505,7 +505,10 @@ private:
     std::vector<VkDescriptorSetLayout> layouts(1);
     layouts[0] = descriptorSetLayout;
 
-    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, layouts, m_pTerrainMesh->VertexInputLayout(),
+    assert(m_pShadowMap   != nullptr);
+    assert(m_pTerrainMesh != nullptr);
+
+    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap->RenderPass(), layouts, m_pTerrainMesh->VertexInputLayout(),
                             &pipelineLayout, &graphicsPipeline, &graphicsPipelineShadow);
 
     
@@ -786,7 +789,7 @@ private:
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
 
-  static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, 
+  static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, VkRenderPass a_shadowMapRenderPass,
                                       std::vector<VkDescriptorSetLayout> a_dslayouts, VkPipelineVertexInputStateCreateInfo a_vertLayout,
                                       VkPipelineLayout* a_pLayout, VkPipeline* a_pPipeline, VkPipeline* a_pPipelineShadow)
   {
@@ -920,11 +923,12 @@ private:
     vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
     vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
 
-    CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), vs_path, nullptr,
+    CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), a_shadowMapRenderPass, vs_path, nullptr,
                           a_pPipelineShadow);
   }
 
-  static void CreateDerivedPipeline(VkDevice a_device, VkGraphicsPipelineCreateInfo a_pipelineInfo, VkPipeline a_basePipeline, const char* a_vsPath, const char* a_fsPath,
+  static void CreateDerivedPipeline(VkDevice a_device, VkGraphicsPipelineCreateInfo a_pipelineInfo, VkPipeline a_basePipeline, VkRenderPass a_renderPass,
+                                    const char* a_vsPath, const char* a_fsPath,
                                     VkPipeline* a_pDerivedPipeline)
   {
     std::vector<uint32_t> vertShaderCode, fragShaderCode;
@@ -965,6 +969,7 @@ private:
     a_pipelineInfo.basePipelineIndex  = -1;
     a_pipelineInfo.stageCount         = (a_fsPath == nullptr) ? 1 : 2;
     a_pipelineInfo.pStages            = shaderStages;
+    a_pipelineInfo.renderPass         = a_renderPass;
 
     if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &a_pipelineInfo, nullptr, a_pDerivedPipeline) != VK_SUCCESS)
       throw std::runtime_error("[CreateDerivedPipeline]: failed to create graphics pipeline!");
@@ -977,7 +982,8 @@ private:
   }
 
   
-  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float3 a_lightDir, bool a_drawGround, VkPipelineLayout a_layout)
+  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float3 a_lightDir, 
+                    bool a_drawGround, VkPipelineLayout a_layout)
   {
     // draw plane/terrain
     //
@@ -1041,8 +1047,19 @@ private:
 
     //// draw scene to shadow map (don't draw plane/terrain in the shadowmap)
     //
+    assert(m_pShadowMap != nullptr);
     {
+      m_pShadowMap->BeginRenderingToThisTexture(a_cmdBuff);
 
+      vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
+
+      auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, 1.0f, 0.1f, 1000.0f));
+      auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
+      auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
+
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float3(0,0,0), false, a_layout);
+
+      m_pShadowMap->EndRenderingToThisTexture(a_cmdBuff);
     }
 
     ///// draw final scene to screen
@@ -1062,7 +1079,7 @@ private:
       renderPassInfo.pClearValues    = &clearValues[0];
 
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-      vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
+      vkCmdBindPipeline   (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
       auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f));

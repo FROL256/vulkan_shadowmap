@@ -476,6 +476,9 @@ VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_dev
 
   VK_CHECK_RESULT(vkCreateImage(a_device, &imgCreateInfo, nullptr, &m_image));
 
+  m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  m_currentStage  = 0;
+
   VkMemoryRequirements memoryRequirements;
   vkGetImageMemoryRequirements(a_device, m_image, &memoryRequirements);
 
@@ -506,6 +509,13 @@ VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_dev
   return memoryRequirements;
 }
 
+VkImageLayout vk_texture::RenderableTexture2D::RenderAttachmentLayout()
+{
+  const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
+  return isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+}
+
+
 void vk_texture::RenderableTexture2D::CreateRenderPass()
 {
   const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
@@ -517,12 +527,12 @@ void vk_texture::RenderableTexture2D::CreateRenderPass()
   colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
   colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  colorAttachment.initialLayout  = isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  colorAttachment.initialLayout  = this->RenderAttachmentLayout();
   colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
   VkAttachmentReference colorAttachmentRef = {};
   colorAttachmentRef.attachment = 0;
-  colorAttachmentRef.layout     = isDepthTexture ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  colorAttachmentRef.layout     = this->RenderAttachmentLayout();
 
   VkSubpassDescription subpass = {};
   subpass.pipelineBindPoint    = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -585,3 +595,65 @@ void vk_texture::RenderableTexture2D::BindMemory(VkDeviceMemory a_memStorage, si
     throw std::runtime_error("[RenderableTexture2D]: failed to create framebuffer!");
 }
 
+void vk_texture::RenderableTexture2D::BeginRenderingToThisTexture(VkCommandBuffer a_cmdBuff)
+{
+  const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
+
+  if(m_currentLayout != RenderAttachmentLayout())
+  {
+    VkImageMemoryBarrier imgBar = {};
+
+    imgBar.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    imgBar.pNext               = nullptr;
+    imgBar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imgBar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imgBar.srcAccessMask       = 0;  
+    imgBar.dstAccessMask       = 0; // VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    imgBar.oldLayout           = m_currentLayout;
+    imgBar.newLayout           = RenderAttachmentLayout();
+    imgBar.image               = m_image;
+
+    imgBar.subresourceRange.aspectMask     = isDepthTexture ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    imgBar.subresourceRange.baseMipLevel   = 0;
+    imgBar.subresourceRange.levelCount     = m_mipLevels;
+    imgBar.subresourceRange.baseArrayLayer = 0;
+    imgBar.subresourceRange.layerCount     = 1;
+
+    vkCmdPipelineBarrier(a_cmdBuff,
+                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         0,
+                         0, nullptr,
+                         0, nullptr,
+                         1, &imgBar);
+
+    m_currentLayout = RenderAttachmentLayout();
+    m_currentStage  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+  }
+
+  VkRenderPassBeginInfo renderPassInfo = {};
+  renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassInfo.renderPass        = this->RenderPass();
+  renderPassInfo.framebuffer       = this->Framebuffer();
+  renderPassInfo.renderArea.offset = { 0, 0 };
+  renderPassInfo.renderArea.extent = VkExtent2D{ uint32_t(this->Width()), uint32_t(this->Height()) };
+
+  VkClearValue clearValues[2]   = {};
+  
+  if(isDepthTexture)
+    clearValues[0].depthStencil = { 1.0f, 0 };
+  else
+    clearValues[0].color        = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+  renderPassInfo.clearValueCount = 1;
+  renderPassInfo.pClearValues    = &clearValues[0];
+
+  vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void vk_texture::RenderableTexture2D::EndRenderingToThisTexture(VkCommandBuffer a_cmdBuff, VkPipelineStageFlagBits a_endStageFlags)
+{
+  vkCmdEndRenderPass(a_cmdBuff);
+  m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  m_currentStage  = a_endStageFlags;   
+}

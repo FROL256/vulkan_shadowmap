@@ -83,6 +83,8 @@ namespace vk_texture
     VkMemoryRequirements CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format);
     void                 BindMemory(VkDeviceMemory a_memStorage, size_t a_offset);
 
+    void                 BeginRenderingToThisTexture(VkCommandBuffer a_cmdBuff);
+    void                 EndRenderingToThisTexture(VkCommandBuffer a_cmdBuff, VkPipelineStageFlagBits a_endStageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
     //// information functions
     //
@@ -104,6 +106,7 @@ namespace vk_texture
   protected:
 
     void CreateRenderPass();
+    VkImageLayout RenderAttachmentLayout();
 
     VkDeviceMemory m_memStorage; // RenderableTexture2D DOES NOT OWN memStorage! It just save reference to it.
     VkImage        m_image;
