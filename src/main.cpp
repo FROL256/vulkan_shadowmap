@@ -171,9 +171,10 @@ private:
   VkDeviceMemory depthImageMemory = nullptr;
   VkImageView    depthImageView   = nullptr;
 
-  VkRenderPass     renderPass;
-  VkPipelineLayout pipelineLayout;
-  VkPipeline       graphicsPipeline;
+  VkRenderPass     renderPass             = nullptr;
+  VkPipelineLayout pipelineLayout         = nullptr;
+  VkPipeline       graphicsPipeline       = nullptr;
+  VkPipeline       graphicsPipelineShadow = nullptr;
 
   VkCommandPool                commandPool;
   std::vector<VkCommandBuffer> commandBuffers;
@@ -505,11 +506,12 @@ private:
     std::vector<VkDescriptorSetLayout> layouts(1);
     layouts[0] = descriptorSetLayout;
 
-    CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, layouts, m_pTerrainMesh->VertexInputLayout(),
-                           &pipelineLayout, &graphicsPipeline);
+    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, layouts, m_pTerrainMesh->VertexInputLayout(),
+                            &pipelineLayout, &graphicsPipeline, &graphicsPipelineShadow);
+
+    
 
     // create command buffers for rendering
-    //
     {
       commandBuffers.resize(screen.swapChainFramebuffers.size());
 
@@ -618,7 +620,10 @@ private:
       vkDestroyFramebuffer(device, framebuffer, nullptr);
     }
 
-    vkDestroyPipeline      (device, graphicsPipeline, nullptr);
+    vkDestroyPipeline(device, graphicsPipeline, nullptr);
+    if(graphicsPipelineShadow != nullptr)
+      vkDestroyPipeline(device, graphicsPipelineShadow, nullptr);
+
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass    (device, renderPass, nullptr);
 
@@ -783,12 +788,15 @@ private:
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
 
-  static void CreateGraphicsPipeline(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, 
-                                     std::vector<VkDescriptorSetLayout> a_dslayouts, VkPipelineVertexInputStateCreateInfo a_vertLayout,
-                                     VkPipelineLayout* a_pLayout, VkPipeline* a_pPipiline)
+  static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, 
+                                      std::vector<VkDescriptorSetLayout> a_dslayouts, VkPipelineVertexInputStateCreateInfo a_vertLayout,
+                                      VkPipelineLayout* a_pLayout, VkPipeline* a_pPipeline, VkPipeline* a_pPipelineShadow)
   {
-    auto vertShaderCode = vk_utils::ReadFile("shaders/cmesh_t3v4x2.spv");
-    auto fragShaderCode = vk_utils::ReadFile("shaders/direct_light.spv");
+    const char* vs_path = "shaders/cmesh_t3v4x2.spv";
+    const char* ps_path = "shaders/direct_light.spv";
+
+    auto vertShaderCode = vk_utils::ReadFile(vs_path);
+    auto fragShaderCode = vk_utils::ReadFile(ps_path);
 
     VkShaderModule vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
     VkShaderModule fragShaderModule = vk_utils::CreateShaderModule(a_device, fragShaderCode);
@@ -908,12 +916,69 @@ private:
     pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
     pipelineInfo.pDepthStencilState  = &depthStencilTest;
 
-    if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, a_pPipiline) != VK_SUCCESS)
+    if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, a_pPipeline) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create graphics pipeline!");
 
     vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
     vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
+
+    CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), vs_path, nullptr,
+                          a_pPipelineShadow);
   }
+
+  static void CreateDerivedPipeline(VkDevice a_device, VkGraphicsPipelineCreateInfo a_pipelineInfo, VkPipeline a_basePipeline, const char* a_vsPath, const char* a_fsPath,
+                                    VkPipeline* a_pDerivedPipeline)
+  {
+    std::vector<uint32_t> vertShaderCode, fragShaderCode;
+    VkShaderModule vertShaderModule = nullptr, fragShaderModule = nullptr;
+
+    assert(a_vsPath != nullptr);
+
+    //if (a_vsPath != nullptr)
+    {
+      vertShaderCode   = vk_utils::ReadFile(a_vsPath);
+      vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
+    }
+
+    if (a_fsPath != nullptr) // when render to shadowmap fragment shader could be nullptr
+    {
+      fragShaderCode   = vk_utils::ReadFile(a_fsPath);
+      fragShaderModule = vk_utils::CreateShaderModule(a_device, fragShaderCode);
+    }
+
+    // Modify pipeline info to reflect derivation
+    //
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+    vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName  = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+    fragShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName  = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    a_pipelineInfo.flags              = VK_PIPELINE_CREATE_DERIVATIVE_BIT;
+    a_pipelineInfo.basePipelineHandle = a_basePipeline;
+    a_pipelineInfo.basePipelineIndex  = -1;
+    a_pipelineInfo.stageCount         = (a_fsPath == nullptr) ? 1 : 2;
+    a_pipelineInfo.pStages            = shaderStages;
+
+    if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &a_pipelineInfo, nullptr, a_pDerivedPipeline) != VK_SUCCESS)
+      throw std::runtime_error("[CreateDerivedPipeline]: failed to create graphics pipeline!");
+
+    if(fragShaderModule != nullptr)
+      vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
+    
+    if(vertShaderModule != nullptr)
+      vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
+  }
+
 
   void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo, VkImageView a_targetImageView,  VkExtent2D a_frameBufferExtent, 
                           VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
