@@ -472,14 +472,14 @@ private:
 
     auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
     auto teapData = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
-    auto lucyData = cmesh::LoadMeshFromVSGF("data/bunny0.vsgf");
+    auto bunnyData = cmesh::LoadMeshFromVSGF("data/bunny0.vsgf");
 
     if(teapData.VerticesNum() == 0)
       RUN_TIME_ERROR("can't load mesh at 'data/teapot.vsgf'");
 
     auto memReq1 = m_pTerrainMesh->CreateBuffers(device, int(meshData.VerticesNum()), int(meshData.IndicesNum())); // what if memReq1 and memReq2 differs in memoryTypeBits ... ? )
     auto memReq2 = m_pTeapotMesh->CreateBuffers (device, int(teapData.VerticesNum()), int(teapData.IndicesNum())); //
-    auto memReq3 = m_pBunnyMesh->CreateBuffers   (device, int(lucyData.VerticesNum()), int(lucyData.IndicesNum())); //
+    auto memReq3 = m_pBunnyMesh->CreateBuffers  (device, int(bunnyData.VerticesNum()), int(bunnyData.IndicesNum())); //
 
     assert(memReq1.memoryTypeBits == memReq2.memoryTypeBits); // assume this in our simple demo
     assert(memReq1.memoryTypeBits == memReq3.memoryTypeBits); // assume this in our simple demo
@@ -496,17 +496,32 @@ private:
 
     m_pTerrainMesh->BindBuffers(m_memAllMeshes, 0);
     m_pTeapotMesh->BindBuffers (m_memAllMeshes, memReq1.size);
-    m_pBunnyMesh->BindBuffers   (m_memAllMeshes, memReq1.size + memReq2.size);
+    m_pBunnyMesh->BindBuffers  (m_memAllMeshes, memReq1.size + memReq2.size);
 
     m_pTerrainMesh->UpdateBuffers(meshData, m_pCopyHelper.get());
     m_pTeapotMesh->UpdateBuffers (teapData, m_pCopyHelper.get());
-    m_pBunnyMesh->UpdateBuffers   (lucyData, m_pCopyHelper.get()); 
+    m_pBunnyMesh->UpdateBuffers  (bunnyData, m_pCopyHelper.get()); 
 
-    CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, 
+    std::vector<VkDescriptorSetLayout> layouts(1);
+    layouts[0] = descriptorSetLayout;
+
+    CreateGraphicsPipeline(device, screen.swapChainExtent, renderPass, layouts, m_pTerrainMesh->VertexInputLayout(),
                            &pipelineLayout, &graphicsPipeline);
 
-    CreateAndWriteCommandBuffers(device, commandPool, screen.swapChainFramebuffers, screen.swapChainExtent, renderPass, graphicsPipeline, pipelineLayout,
-                                 &commandBuffers);
+    // create command buffers for rendering
+    //
+    {
+      commandBuffers.resize(screen.swapChainFramebuffers.size());
+
+      VkCommandBufferAllocateInfo allocInfo = {};
+      allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+      allocInfo.commandPool        = commandPool;
+      allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+      allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
+
+      if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
+        throw std::runtime_error("[CreateCommandPoolAndBuffers]: failed to allocate command buffers!");
+    }
 
   }
 
@@ -768,8 +783,9 @@ private:
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
 
-  void CreateGraphicsPipeline(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass,
-                              VkPipelineLayout* a_pLayout, VkPipeline* a_pPipiline)
+  static void CreateGraphicsPipeline(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, 
+                                     std::vector<VkDescriptorSetLayout> a_dslayouts, VkPipelineVertexInputStateCreateInfo a_vertLayout,
+                                     VkPipelineLayout* a_pLayout, VkPipeline* a_pPipiline)
   {
     auto vertShaderCode = vk_utils::ReadFile("shaders/cmesh_t3v4x2.spv");
     auto fragShaderCode = vk_utils::ReadFile("shaders/direct_light.spv");
@@ -856,8 +872,8 @@ private:
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
-    pipelineLayoutInfo.pSetLayouts            = &descriptorSetLayout;
-    pipelineLayoutInfo.setLayoutCount         = 1;
+    pipelineLayoutInfo.pSetLayouts            = a_dslayouts.data(); //&descriptorSetLayout;
+    pipelineLayoutInfo.setLayoutCount         = uint32_t(a_dslayouts.size());
 
     if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
@@ -873,11 +889,11 @@ private:
     depthStencilTest.minDepthBounds        = 0.0f; // Optional
     depthStencilTest.maxDepthBounds        = 1.0f; // Optional
 
-    assert(m_pTerrainMesh != nullptr);
-    auto vertexInputInfo = m_pTerrainMesh->VertexInputLayout();
+    auto vertexInputInfo = a_vertLayout;
 
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.flags               = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT; // we need this for creating derivative pipeline for shadowmap
     pipelineInfo.stageCount          = 2;
     pipelineInfo.pStages             = shaderStages;
     pipelineInfo.pVertexInputState   = &vertexInputInfo;
@@ -907,12 +923,19 @@ private:
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    //beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
     if (vkBeginCommandBuffer(a_cmdBuff, &beginInfo) != VK_SUCCESS) 
       throw std::runtime_error("[WriteCommandBuffer]: failed to begin recording command buffer!");
 
-    ///// 
+    //// draw scene to shadow map (don't draw plane/terrain in the shadowmap)
+    //
+    {
+
+    }
+
+    ///// draw final scene to screen
+    //
     {
       VkRenderPassBeginInfo renderPassInfo = {};
       renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -987,30 +1010,6 @@ private:
       throw std::runtime_error("failed to record command buffer!");  
   }
 
-
-  void CreateAndWriteCommandBuffers(VkDevice a_device, VkCommandPool a_cmdPool, std::vector<VkFramebuffer> a_swapChainFramebuffers, VkExtent2D a_frameBufferExtent,
-                                    VkRenderPass a_renderPass, VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
-                                    std::vector<VkCommandBuffer>* a_cmdBuffers) 
-  {
-    std::vector<VkCommandBuffer>& commandBuffers = (*a_cmdBuffers);
-
-    commandBuffers.resize(a_swapChainFramebuffers.size());
-
-    VkCommandBufferAllocateInfo allocInfo = {};
-    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool        = a_cmdPool;
-    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
-
-    if (vkAllocateCommandBuffers(a_device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
-      throw std::runtime_error("[CreateCommandPoolAndBuffers]: failed to allocate command buffers!");
-
-    for (size_t i = 0; i < commandBuffers.size(); i++) 
-    {
-      WriteCommandBuffer(a_renderPass, a_swapChainFramebuffers[i], screen.swapChainImageViews[i], a_frameBufferExtent, a_graphicsPipeline, a_layout, 
-                         commandBuffers[i]);
-    }
-  }
 
   static void CreateSyncObjects(VkDevice a_device, SyncObj* a_pSyncObjs)
   {
