@@ -1082,8 +1082,8 @@ private:
 
       const float r = 5.0f;
 
-      //auto mProj          = LiteMath::transpose(LiteMath::ortoMatrixTransposed(-r, +r, -r, +r, 0.0f, 1000.0f));
-      auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, 1.0f, 0.1f, 1000.0f));
+      auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, 0.0f, 10.0f);
+      //auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, 1.0f, 0.1f, 1000.0f));
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
       auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
 

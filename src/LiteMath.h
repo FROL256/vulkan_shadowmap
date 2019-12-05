@@ -729,27 +729,27 @@ namespace LiteMath
     return res;
   }
 
-  static inline float4x4 ortoMatrixTransposed(const float l, const float r, const float b, const float t, const float n, const float f) // please see glOrth
+  static inline float4x4 ortoMatrix(const float l, const float r, const float b, const float t, const float n, const float f) 
   {
     float4x4 res;
     res.row[0].x = 2.0f / (r - l); 
     res.row[0].y = 0; 
     res.row[0].z = 0; 
-    res.row[0].w = 0; 
+    res.row[0].w = -(r + l) / (r - l);
  
     res.row[1].x = 0; 
     res.row[1].y = 2.0f / (t - b); 
     res.row[1].z = 0; 
-    res.row[1].w = 0; 
+    res.row[1].w = -(t + b) / (t - b);
  
     res.row[2].x = 0; 
     res.row[2].y = 0; 
-    res.row[2].z = -2.0f / (f - n); 
-    res.row[2].w = 0; 
+    res.row[2].z = -1.0f / (f - n); 
+    res.row[2].w = -(f + n) / (f - n); 
  
-    res.row[3].x = -(r + l) / (r - l); // assert (r != l);
-    res.row[3].y = -(t + b) / (t - b); // assert (t != b);
-    res.row[3].z = -(f + n) / (f - n); // assert (f != n);
+    res.row[3].x = 0.0f;
+    res.row[3].y = 0.0f;
+    res.row[3].z = 0.0f;
     res.row[3].w = 1.0f; 
     return res;
   }
