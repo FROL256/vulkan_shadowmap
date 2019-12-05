@@ -223,7 +223,8 @@ private:
   std::shared_ptr<vk_geom::IMesh>   m_pBunnyMesh;
   std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
-  std::shared_ptr<vk_texture::SimpleTexture2D> m_pTex1, m_pTex2, m_pTex3;
+  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, TEXTURES_NUM = 3};
+  std::shared_ptr<vk_texture::SimpleTexture2D>     m_pTex[TEXTURES_NUM];
   std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -393,14 +394,13 @@ private:
     if (data3.size() == 0)
       RUN_TIME_ERROR("data/metal.bmp | NOT FOUND!");
 
-    m_pTex1      = std::make_shared<vk_texture::SimpleTexture2D>();
-    m_pTex2      = std::make_shared<vk_texture::SimpleTexture2D>();
-    m_pTex3      = std::make_shared<vk_texture::SimpleTexture2D>();
+    for(int i=0;i<TEXTURES_NUM;i++)
+      m_pTex[i] = std::make_shared<vk_texture::SimpleTexture2D>();
     m_pShadowMap = std::make_shared<vk_texture::RenderableTexture2D>();
-
-    auto memReqTex1 = m_pTex1->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
-    auto memReqTex2 = m_pTex2->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
-    auto memReqTex3 = m_pTex3->CreateImage(device, w3, h3, VK_FORMAT_R8G8B8A8_UNORM);
+   
+    auto memReqTex1 = m_pTex[TERRAIN_TEX]->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
+    auto memReqTex2 = m_pTex[STONE_TEX]->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
+    auto memReqTex3 = m_pTex[METAL_TEX]->CreateImage(device, w3, h3, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D32_SFLOAT);
 
     assert(memReqTex1.memoryTypeBits == memReqTex2.memoryTypeBits);
@@ -429,20 +429,20 @@ private:
       VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memShadowMap));
     }
 
-    m_pTex1->BindMemory(m_memAllTextures, 0);
-    m_pTex2->BindMemory(m_memAllTextures, memReqTex1.size);
-    m_pTex3->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size);
+    m_pTex[0]->BindMemory(m_memAllTextures, 0);
+    m_pTex[1]->BindMemory(m_memAllTextures, memReqTex1.size);
+    m_pTex[2]->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size);
     m_pShadowMap->BindMemory(m_memShadowMap, 0);
 
-    VkSampler samplers[] = { m_pTex1->Sampler(), m_pTex2->Sampler(), m_pTex3->Sampler()};
-    VkImageView views [] = { m_pTex1->View(),    m_pTex2->View(), m_pTex3->View()      };
+    VkSampler samplers[] = { m_pTex[0]->Sampler(), m_pTex[1]->Sampler(), m_pTex[2]->Sampler()};
+    VkImageView views [] = { m_pTex[0]->View(),    m_pTex[1]->View(), m_pTex[2]->View()      };
 
-    CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, 3,
+    CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, TEXTURES_NUM,
                                   &descriptorPool, descriptorSet);
 
-    m_pTex1->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex1 in transfer_dst layout
-    m_pTex2->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex2 in transfer_dst layout
-    m_pTex3->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex3 in transfer_dst layout
+    m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
+    m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
+    m_pTex[METAL_TEX]->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
     
     // generate all mips
     //
@@ -456,9 +456,8 @@ private:
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      m_pTex1->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex1 in shader_read layout
-      m_pTex2->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex2 in shader_read layout
-      m_pTex3->GenerateMipsCmd(cmdBuff);                                    // --> put m_pTex3 in shader_read layout 
+      for (int i = 0; i<TEXTURES_NUM; i++)
+        m_pTex[i]->GenerateMipsCmd(cmdBuff);                                            // --> put m_pTex[i] in shader_read layout
      
       vkEndCommandBuffer(cmdBuff);
 
@@ -566,14 +565,13 @@ private:
   void Cleanup() 
   { 
     m_pShadowMap = nullptr;
-    m_pTex1 = nullptr;        // smart pointer will destroy resources
-    m_pTex2 = nullptr;
-    m_pTex3 = nullptr;
-
+    for(int i=0;i<TEXTURES_NUM;i++)
+      m_pTex[i] = nullptr;    // smart pointer will destroy resources
+  
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
     m_pTeapotMesh  = nullptr;
-    m_pBunnyMesh    = nullptr;
+    m_pBunnyMesh   = nullptr;
     m_pFSQuad      = nullptr;
 
     // free our vbos
@@ -873,7 +871,7 @@ private:
     VkPushConstantRange pcRange = {};   
     pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     pcRange.offset     = 0;
-    pcRange.size       = 16*2*sizeof(float) + 4*sizeof(float);
+    pcRange.size       = 16*2*sizeof(float) + 8*sizeof(float);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -948,7 +946,6 @@ private:
 
     // Modify pipeline info to reflect derivation
     //
-
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
     vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
@@ -979,6 +976,55 @@ private:
       vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
   }
 
+  
+  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float3 a_lightDir, bool a_drawGround, VkPipelineLayout a_layout)
+  {
+    // draw plane/terrain
+    //
+    LiteMath::float4x4 matrices[3];
+
+    {
+      matrices[2].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
+      matrices[2].row[1] = LiteMath::to_float4(a_lightDir, 0.0f);
+    }
+
+    {
+      auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
+      auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
+      matrices[0] = LiteMath::transpose(mWVP);
+    }
+
+    if (a_drawGround)
+    {
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + TERRAIN_TEX, 0, NULL);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 2 * 16 + 8 * sizeof(float), matrices);
+      m_pTerrainMesh->DrawCmd(a_cmdBuff);
+    }
+
+    // draw teapot
+    {
+      auto mtranslate = LiteMath::translate4x4({ -0.5f, 0.4f, -0.5f });
+      auto mWVP       = LiteMath::mul(a_mWorldViewProj, mtranslate);
+      matrices[0]     = LiteMath::transpose(mWVP);
+    }
+
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + STONE_TEX, 0, NULL);
+    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 2 * 16 + 8 * sizeof(float), matrices);
+    m_pTeapotMesh->DrawCmd(a_cmdBuff);
+
+    // draw bunny
+    {
+      auto mtranslate = LiteMath::translate4x4({ +1.25f, 0.6f, 0.5f });
+      auto mscale     = LiteMath::scale4x4({ 75.0, 75.0, 75.0 });
+      auto mWVP       = LiteMath::mul(a_mWorldViewProj, LiteMath::mul(mtranslate, mscale));
+      matrices[0]     = LiteMath::transpose(mWVP);
+    }
+
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + METAL_TEX, 0, NULL);
+    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 2 * 16 + 8 * sizeof(float), matrices);
+    m_pBunnyMesh->DrawCmd(a_cmdBuff);
+  }
+  
 
   void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo, VkImageView a_targetImageView,  VkExtent2D a_frameBufferExtent, 
                           VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
@@ -1016,50 +1062,15 @@ private:
       renderPassInfo.pClearValues    = &clearValues[0];
 
       vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
       vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+0, 0, NULL);
 
-      const float aspect   = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
-      auto mProjTransposed = LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f);
-      auto mLookAt         = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
+      const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
+      auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f));
+      auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
+      auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
 
-      // draw plane
-      LiteMath::float4x4 matrices[3];
-      {
-        auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
-        matrices[0] = LiteMath::transpose(LiteMath::mul(mLookAt, mrot));  
-        matrices[1] = mProjTransposed;
-        matrices[2].row[0].x = m_cam.pos.x;  matrices[2].row[0].y = m_cam.pos.y;  matrices[2].row[0].z = m_cam.pos.z; // pass cam pos to shader
-      }
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
-      m_pTerrainMesh->DrawCmd(a_cmdBuff);
-      
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+1, 0, NULL);
-
-      // draw teapot
-      {
-        auto mtranslate = LiteMath::translate4x4({-0.5f, 0.4f, -0.5f});
-        matrices[0]     = LiteMath::transpose(LiteMath::mul(mLookAt, mtranslate));  
-        matrices[1]     = mProjTransposed;
-        matrices[2].row[0].x = m_cam.pos.x;  matrices[2].row[0].y = m_cam.pos.y;  matrices[2].row[0].z = m_cam.pos.z; // pass cam pos to shader
-      }
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
-      m_pTeapotMesh->DrawCmd(a_cmdBuff);
-      
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet+2, 0, NULL);
-
-      // draw bunny
-      {
-        auto mtranslate = LiteMath::translate4x4({+1.25f, 0.6f, 0.5f});
-        auto mscale     = LiteMath::scale4x4({75.0, 75.0, 75.0});
-        matrices[0]     = LiteMath::transpose(LiteMath::mul(mLookAt, (LiteMath::mul(mtranslate, mscale))));  
-        matrices[1]     = mProjTransposed;
-        matrices[2].row[0].x = m_cam.pos.x;  matrices[2].row[0].y = m_cam.pos.y;  matrices[2].row[0].z = m_cam.pos.z; // pass cam pos to shader
-      }
-
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float)*2*16 + 4*sizeof(float), matrices);
-      m_pBunnyMesh->DrawCmd(a_cmdBuff);
+      LiteMath::float3 lightDir = LiteMath::normalize(LiteMath::float3(1, 1, 1));
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightDir, true, a_layout);
 
       vkCmdEndRenderPass(a_cmdBuff);
     }

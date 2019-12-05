@@ -6,9 +6,10 @@ layout(location = 1) in vec4 vTexCoordAndTang;
 
 layout(push_constant) uniform params_t
 {
-  mat4 mWorldView;
-  mat4 mProj;  
+  mat4 mWorldViewProj;
+  mat4 mWorldLightProj;  
   vec4 wCamPos;
+  vec4 lightDir;
 
 } params;
 
@@ -42,13 +43,11 @@ layout (location = 0 ) out VS_OUT
 
 void main(void)
 { 
-  vOut.wPos      = vPosNorm.xyz;
-  vOut.wNorm     = DecodeNormal(floatBitsToInt(vPosNorm.w));
-  vOut.wTangent  = DecodeNormal(floatBitsToInt(vTexCoordAndTang.z));
-  vOut.texCoord  = vTexCoordAndTang.xy;
+  vOut.wPos     = vPosNorm.xyz;
+  vOut.wNorm    = DecodeNormal(floatBitsToInt(vPosNorm.w));
+  vOut.wTangent = DecodeNormal(floatBitsToInt(vTexCoordAndTang.z));
+  vOut.texCoord = vTexCoordAndTang.xy;
 
-  const vec4 posCamSpace = params.mWorldView*vec4(vOut.wPos, 1.0);
-
-  gl_Position   = params.mProj*posCamSpace;
+  gl_Position   = params.mWorldViewProj*vec4(vOut.wPos, 1.0);
   gl_Position.y = -gl_Position.y;	// Vulkan coordinate system is different to OpenGL    
 }
