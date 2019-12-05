@@ -135,7 +135,7 @@ void vk_utils::FSQuad::Create(VkDevice a_device, const char* a_vspath, const cha
   VkPushConstantRange pcRange = {};   
   pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
   pcRange.offset     = 0;
-  pcRange.size       = 4*sizeof(float);
+  pcRange.size       = 8*sizeof(float);
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
   pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -218,7 +218,8 @@ void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_inTe
   vkCmdBindPipeline      (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
   vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, m_layout, 0, 1, &a_inTexDescriptor, 0, NULL);
 
-  float scaleAndOffset[4] = {1.0f, 1.0f, 0.0f, 0.0f};
+  float scaleAndOffset[8] = {1.0f, 1.0f, 0.0f, 0.0f, 
+                             0.0f, 1e6f, 1.0f, 0.0f};
   if(a_offsAndScale != 0)
   {
     scaleAndOffset[0] = a_offsAndScale[0];
@@ -227,7 +228,7 @@ void vk_utils::FSQuad::DrawCmd(VkCommandBuffer a_cmdBuff, VkDescriptorSet a_inTe
     scaleAndOffset[3] = a_offsAndScale[3];
   }
 
-  vkCmdPushConstants(a_cmdBuff, m_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, 4*sizeof(float), scaleAndOffset);
+  vkCmdPushConstants(a_cmdBuff, m_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, 8*sizeof(float), scaleAndOffset);
 
   vkCmdDraw(a_cmdBuff, 4, 1, 0, 0);
 

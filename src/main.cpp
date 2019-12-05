@@ -179,15 +179,6 @@ private:
   VkCommandPool                commandPool;
   std::vector<VkCommandBuffer> commandBuffers;
 
-  // Descriptors represent resources in shaders. They allow us to use things like
-  // uniform buffers, storage buffers and images in GLSL.
-  // A single descriptor represents a single resource, and several descriptors are organized
-  // into descriptor sets, which are basically just collections of descriptors.
-  // 
-  VkDescriptorPool      descriptorPool      = nullptr;
-  VkDescriptorSet       descriptorSet[3]    = {}; // for our textures
-  VkDescriptorSetLayout descriptorSetLayout = nullptr;
-
   VkDeviceMemory        m_memAllMeshes   = nullptr; //
   VkDeviceMemory        m_memAllTextures = nullptr;
   VkDeviceMemory        m_memShadowMap   = nullptr;
@@ -223,9 +214,20 @@ private:
   std::shared_ptr<vk_geom::IMesh>   m_pBunnyMesh;
   std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
-  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, TEXTURES_NUM = 3};
+  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, TEXTURES_NUM = 3, // 
+        SHADOW_MAP = 3, DESCRIPTORS_NUM = TEXTURES_NUM+1};               //
+
   std::shared_ptr<vk_texture::SimpleTexture2D>     m_pTex[TEXTURES_NUM];
   std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
+
+  // Descriptors represent resources in shaders. They allow us to use things like
+  // uniform buffers, storage buffers and images in GLSL.
+  // A single descriptor represents a single resource, and several descriptors are organized
+  // into descriptor sets, which are basically just collections of descriptors.
+  // 
+  VkDescriptorPool      descriptorPool = nullptr;
+  VkDescriptorSet       descriptorSet[DESCRIPTORS_NUM] = {}; // for our textures
+  VkDescriptorSetLayout descriptorSetLayout = nullptr;
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -372,7 +374,7 @@ private:
     CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
 
     m_pFSQuad = std::make_shared<vk_utils::FSQuad>();
-    m_pFSQuad->Create(device, "shaders/quad_vert.spv", "shaders/quad_frag.spv", 
+    m_pFSQuad->Create(device, "shaders/quad_vert.spv", "shaders/quad_depth.spv", 
                       vk_utils::RenderTargetInfo2D{ VkExtent2D{ WIDTH, HEIGHT }, screen.swapChainImageFormat, 
                                                     VK_ATTACHMENT_LOAD_OP_LOAD, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR });
   
@@ -434,10 +436,10 @@ private:
     m_pTex[2]->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size);
     m_pShadowMap->BindMemory(m_memShadowMap, 0);
 
-    VkSampler samplers[] = { m_pTex[0]->Sampler(), m_pTex[1]->Sampler(), m_pTex[2]->Sampler()};
-    VkImageView views [] = { m_pTex[0]->View(),    m_pTex[1]->View(), m_pTex[2]->View()      };
+    VkSampler samplers[] = { m_pTex[0]->Sampler(), m_pTex[1]->Sampler(), m_pTex[2]->Sampler(), m_pShadowMap->Sampler()};
+    VkImageView views [] = { m_pTex[0]->View(),    m_pTex[1]->View(), m_pTex[2]->View(), m_pShadowMap->View() };
 
-    CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, TEXTURES_NUM,
+    CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, DESCRIPTORS_NUM,
                                   &descriptorPool, descriptorSet);
 
     m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
@@ -508,7 +510,7 @@ private:
     assert(m_pShadowMap   != nullptr);
     assert(m_pTerrainMesh != nullptr);
 
-    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap->RenderPass(), layouts, m_pTerrainMesh->VertexInputLayout(),
+    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap, layouts, m_pTerrainMesh->VertexInputLayout(),
                             &pipelineLayout, &graphicsPipeline, &graphicsPipelineShadow);
 
     
@@ -789,7 +791,7 @@ private:
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
 
-  static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, VkRenderPass a_shadowMapRenderPass,
+  static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, std::shared_ptr<vk_texture::RenderableTexture2D> a_shadowTex,
                                       std::vector<VkDescriptorSetLayout> a_dslayouts, VkPipelineVertexInputStateCreateInfo a_vertLayout,
                                       VkPipelineLayout* a_pLayout, VkPipeline* a_pPipeline, VkPipeline* a_pPipelineShadow)
   {
@@ -823,12 +825,12 @@ private:
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport = {};
-    viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = (float)a_screenExtent.width;
-    viewport.height   = (float)a_screenExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
+    viewport.x          = 0.0f;
+    viewport.y          = 0.0f;
+    viewport.width      = (float)a_screenExtent.width;
+    viewport.height     = (float)a_screenExtent.height;
+    viewport.minDepth   = 0.0f;
+    viewport.maxDepth   = 1.0f;
 
     VkRect2D scissor = {};
     scissor.offset = { 0, 0 };
@@ -923,20 +925,21 @@ private:
     vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
     vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
 
-    CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), a_shadowMapRenderPass, vs_path, nullptr,
+    // create similar pipeline for shadow map. But now we do not attach pixel shader.
+    //
+    CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), 
+                          a_shadowTex->RenderPass(), uint32_t(a_shadowTex->Width()), uint32_t(a_shadowTex->Height()), vs_path, nullptr,
                           a_pPipelineShadow);
   }
 
-  static void CreateDerivedPipeline(VkDevice a_device, VkGraphicsPipelineCreateInfo a_pipelineInfo, VkPipeline a_basePipeline, VkRenderPass a_renderPass,
-                                    const char* a_vsPath, const char* a_fsPath,
+  static void CreateDerivedPipeline(VkDevice a_device, VkGraphicsPipelineCreateInfo a_pipelineInfo, VkPipeline a_basePipeline, 
+                                    VkRenderPass a_renderPass, uint32_t a_width, uint32_t a_height, const char* a_vsPath, const char* a_fsPath,
                                     VkPipeline* a_pDerivedPipeline)
   {
     std::vector<uint32_t> vertShaderCode, fragShaderCode;
     VkShaderModule vertShaderModule = nullptr, fragShaderModule = nullptr;
 
     assert(a_vsPath != nullptr);
-
-    //if (a_vsPath != nullptr)
     {
       vertShaderCode   = vk_utils::ReadFile(a_vsPath);
       vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
@@ -964,21 +967,39 @@ private:
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
+    VkViewport viewport = {};
+    viewport.x        = 0.0f;
+    viewport.y        = 0.0f;
+    viewport.width    = (float)a_width;
+    viewport.height   = (float)a_height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor = {};
+    scissor.offset   = { 0, 0 };
+    scissor.extent   = VkExtent2D{ a_width, a_height };
+
+    VkPipelineViewportStateCreateInfo viewportState = {};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports    = &viewport;
+    viewportState.scissorCount  = 1;
+    viewportState.pScissors     = &scissor;
+
     a_pipelineInfo.flags              = VK_PIPELINE_CREATE_DERIVATIVE_BIT;
     a_pipelineInfo.basePipelineHandle = a_basePipeline;
     a_pipelineInfo.basePipelineIndex  = -1;
     a_pipelineInfo.stageCount         = (a_fsPath == nullptr) ? 1 : 2;
     a_pipelineInfo.pStages            = shaderStages;
     a_pipelineInfo.renderPass         = a_renderPass;
+    a_pipelineInfo.pViewportState     = &viewportState;
 
     if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &a_pipelineInfo, nullptr, a_pDerivedPipeline) != VK_SUCCESS)
       throw std::runtime_error("[CreateDerivedPipeline]: failed to create graphics pipeline!");
 
+    vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
     if(fragShaderModule != nullptr)
       vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
-    
-    if(vertShaderModule != nullptr)
-      vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
   }
 
   
@@ -1096,7 +1117,7 @@ private:
     {
       float scaleAndOffset[4] = {0.5f, 0.5f, -0.5f, +0.5f};
       m_pFSQuad->SetRenderTarget(a_targetImageView);
-      m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSet[0], scaleAndOffset);
+      m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSet[SHADOW_MAP], scaleAndOffset);
     }
 
     if (vkEndCommandBuffer(a_cmdBuff) != VK_SUCCESS)

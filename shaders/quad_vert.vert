@@ -4,6 +4,7 @@
 layout(push_constant) uniform params_t
 {
   vec4 scaleAndOffs;
+  vec4 depthMinMaxScale;
 
 } params;
 

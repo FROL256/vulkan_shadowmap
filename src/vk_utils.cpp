@@ -671,5 +671,5 @@ void vk_utils::CreateRenderPass(VkDevice a_device, RenderTargetInfo2D a_rtInfo,
 
 bool vk_utils::IsDepthFormat(VkFormat a_format)
 {
-  return (a_format == VK_FORMAT_D32_SFLOAT);
+  return (a_format == VK_FORMAT_D32_SFLOAT) || (a_format == VK_FORMAT_D16_UNORM);
 }
