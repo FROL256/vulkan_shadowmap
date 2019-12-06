@@ -13,6 +13,7 @@ layout (location = 0 ) in VS_OUT
 } surf;
 
 layout (binding = 0) uniform sampler2D diffColor;
+layout (binding = 1) uniform sampler2D shadowMap;
 
 layout(push_constant) uniform params_t
 {

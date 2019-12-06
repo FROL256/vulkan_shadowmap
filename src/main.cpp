@@ -260,7 +260,8 @@ private:
   // 
   VkDescriptorPool      descriptorPool = nullptr;
   VkDescriptorSet       descriptorSet[DESCRIPTORS_NUM] = {}; // for our textures
-  VkDescriptorSetLayout descriptorSetLayout = nullptr;
+  VkDescriptorSet       descriptorSetWithSM[TEXTURES_NUM] = {};
+  VkDescriptorSetLayout descriptorSetLayout = nullptr, descriptorSetLayoutSM = nullptr;
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -413,7 +414,8 @@ private:
   
     CreateSyncObjects(device, &m_sync);
 
-    CreateDescriptorSetLayout(device, &descriptorSetLayout);
+    CreateDescriptorSetLayoutForSingleTexture(device, &descriptorSetLayout);
+    CreateDescriptorSetLayoutForTextureAndShadowMap(device, &descriptorSetLayoutSM);
 
     // create textures
     //
@@ -470,10 +472,13 @@ private:
     m_pShadowMap->BindMemory(m_memShadowMap, 0);
 
     VkSampler samplers[] = { m_pTex[0]->Sampler(), m_pTex[1]->Sampler(), m_pTex[2]->Sampler(), m_pShadowMap->Sampler()};
-    VkImageView views [] = { m_pTex[0]->View(),    m_pTex[1]->View(), m_pTex[2]->View(), m_pShadowMap->View() };
+    VkImageView views [] = { m_pTex[0]->View(),    m_pTex[1]->View(),    m_pTex[2]->View(),    m_pShadowMap->View() };
 
     CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, DESCRIPTORS_NUM,
                                   &descriptorPool, descriptorSet);
+
+    CreateDescriptorSetsForImagesWithSM(device, descriptorSetLayoutSM, descriptorPool, samplers, views, m_pShadowMap->Sampler(), m_pShadowMap->View(), TEXTURES_NUM,
+                                        descriptorSetWithSM);
 
     m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
     m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
@@ -537,13 +542,10 @@ private:
     m_pTeapotMesh->UpdateBuffers (teapData, m_pCopyHelper.get());
     m_pBunnyMesh->UpdateBuffers  (bunnyData, m_pCopyHelper.get()); 
 
-    std::vector<VkDescriptorSetLayout> layouts(1);
-    layouts[0] = descriptorSetLayout;
-
     assert(m_pShadowMap   != nullptr);
     assert(m_pTerrainMesh != nullptr);
 
-    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap, layouts, m_pTerrainMesh->VertexInputLayout(),
+    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap, descriptorSetLayoutSM, m_pTerrainMesh->VertexInputLayout(),
                             &pipelineLayout, &graphicsPipeline, &graphicsPipelineShadow);
 
     // create command buffers for rendering
@@ -633,8 +635,11 @@ private:
     if (descriptorPool != nullptr)
       vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-    if(descriptorSetLayout != nullptr)
+    if (descriptorSetLayout != nullptr)
+    {
       vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
+      vkDestroyDescriptorSetLayout(device, descriptorSetLayoutSM, NULL);
+    }
 
     if (enableValidationLayers)
     {
@@ -680,7 +685,7 @@ private:
     glfwTerminate();
   }
 
-  static void CreateDescriptorSetLayout(VkDevice a_device, VkDescriptorSetLayout *a_pDSLayout)
+  static void CreateDescriptorSetLayoutForSingleTexture(VkDevice a_device, VkDescriptorSetLayout *a_pDSLayout)
   {
     VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[1];
   
@@ -699,6 +704,31 @@ private:
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, a_pDSLayout));
   }
 
+  static void CreateDescriptorSetLayoutForTextureAndShadowMap(VkDevice a_device, VkDescriptorSetLayout *a_pDSLayout)
+  {
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[2];
+
+    descriptorSetLayoutBinding[0].binding            = 0;
+    descriptorSetLayoutBinding[0].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorSetLayoutBinding[0].descriptorCount    = 1;
+    descriptorSetLayoutBinding[0].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+    descriptorSetLayoutBinding[0].pImmutableSamplers = nullptr;
+
+    descriptorSetLayoutBinding[1].binding            = 1;
+    descriptorSetLayoutBinding[1].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorSetLayoutBinding[1].descriptorCount    = 1;
+    descriptorSetLayoutBinding[1].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+    descriptorSetLayoutBinding[1].pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+    descriptorSetLayoutCreateInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutCreateInfo.bindingCount = 2;
+    descriptorSetLayoutCreateInfo.pBindings    = descriptorSetLayoutBinding;
+
+    // Create the descriptor set layout.
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, a_pDSLayout));
+  }
+
   void CreateDescriptorSetsForImages(VkDevice a_device, const VkDescriptorSetLayout a_dsLayout, VkSampler* a_samplers, VkImageView *a_views, int a_imagesNumber,
                                      VkDescriptorPool* a_pDSPool, VkDescriptorSet* a_pDS)
   {
@@ -709,16 +739,16 @@ private:
     assert(a_views    != nullptr);
     assert(a_imagesNumber != 0);
 
-    std::vector<VkDescriptorPoolSize> descriptorPoolSize(a_imagesNumber);
-    for(int i=0;i<a_imagesNumber;i++)
+    std::vector<VkDescriptorPoolSize> descriptorPoolSize(a_imagesNumber*2);
+    for(int i=0;i<descriptorPoolSize.size();i++)
     {
       descriptorPoolSize[i].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-      descriptorPoolSize[i].descriptorCount = 1;
+      descriptorPoolSize[i].descriptorCount = 2;
     }
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
     descriptorPoolCreateInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.maxSets       = a_imagesNumber; // we need to allocate at least 1 descriptor set
-    descriptorPoolCreateInfo.poolSizeCount = a_imagesNumber;
+    descriptorPoolCreateInfo.maxSets       = a_imagesNumber*2; // we need to allocate at least 1 descriptor set
+    descriptorPoolCreateInfo.poolSizeCount = uint32_t(descriptorPoolSize.size());
     descriptorPoolCreateInfo.pPoolSizes    = descriptorPoolSize.data();
 
     VK_CHECK_RESULT(vkCreateDescriptorPool(a_device, &descriptorPoolCreateInfo, NULL, a_pDSPool));
@@ -762,6 +792,65 @@ private:
     }
 
     vkUpdateDescriptorSets(a_device, a_imagesNumber, writeDescriptorSets.data(), 0, NULL);
+  }
+
+  void CreateDescriptorSetsForImagesWithSM(VkDevice a_device, const VkDescriptorSetLayout a_dsLayout, VkDescriptorPool a_dsPool,
+                                           VkSampler* a_samplers, VkImageView *a_views, VkSampler a_shadowSampler, VkImageView a_view,
+                                           int a_imagesNumber, VkDescriptorSet* a_pDS)
+  {
+    assert(a_pDS != nullptr);
+
+    assert(a_samplers != nullptr);
+    assert(a_views != nullptr);
+    assert(a_imagesNumber != 0);
+
+    // With the pool allocated, we can now allocate the descriptor set.
+    //
+    std::vector<VkDescriptorSetLayout> layouts(a_imagesNumber);
+    for (int i = 0; i<layouts.size(); i++)
+      layouts[i] = a_dsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
+    descriptorSetAllocateInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAllocateInfo.descriptorPool     = a_dsPool;   // pool to allocate from.
+    descriptorSetAllocateInfo.descriptorSetCount = a_imagesNumber; // allocate a descriptor set for buffer and image
+    descriptorSetAllocateInfo.pSetLayouts        = layouts.data();
+
+    // allocate descriptor set.
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(a_device, &descriptorSetAllocateInfo, a_pDS));
+
+    // Next, we need to connect our actual texture with the descriptor.
+    // We use vkUpdateDescriptorSets() to update the descriptor set.
+    //
+    std::vector<VkDescriptorImageInfo> descriptorImageInfos(a_imagesNumber);
+    std::vector<VkWriteDescriptorSet>  writeDescriptorSets(a_imagesNumber);
+
+    VkDescriptorImageInfo shadowImageInfo;
+    shadowImageInfo             = VkDescriptorImageInfo{};
+    shadowImageInfo.sampler     = a_shadowSampler;
+    shadowImageInfo.imageView   = a_view;
+    shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    for (int imageId = 0; imageId < a_imagesNumber; imageId++)
+    {
+      descriptorImageInfos[imageId]             = VkDescriptorImageInfo{};
+      descriptorImageInfos[imageId].sampler     = a_samplers[imageId];
+      descriptorImageInfos[imageId].imageView   = a_views[imageId];
+      descriptorImageInfos[imageId].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+      VkDescriptorImageInfo descrImageInfos[2] = { descriptorImageInfos[imageId] , shadowImageInfo };
+
+      writeDescriptorSets[imageId]                 = VkWriteDescriptorSet{};
+      writeDescriptorSets[imageId].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      writeDescriptorSets[imageId].dstSet          = a_pDS[imageId];
+      writeDescriptorSets[imageId].dstBinding      = 0;
+      writeDescriptorSets[imageId].descriptorCount = 2;
+      writeDescriptorSets[imageId].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // image.
+      writeDescriptorSets[imageId].pImageInfo      = descrImageInfos;
+
+      vkUpdateDescriptorSets(a_device, 1, writeDescriptorSets.data() + imageId, 0, NULL);
+    }
+
   }
 
 
@@ -827,7 +916,7 @@ private:
   }
 
   static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, std::shared_ptr<vk_texture::RenderableTexture2D> a_shadowTex,
-                                      std::vector<VkDescriptorSetLayout> a_dslayouts, VkPipelineVertexInputStateCreateInfo a_vertLayout,
+                                      VkDescriptorSetLayout a_dslayout, VkPipelineVertexInputStateCreateInfo a_vertLayout,
                                       VkPipelineLayout* a_pLayout, VkPipeline* a_pPipeline, VkPipeline* a_pPipelineShadow)
   {
     const char* vs_path = "shaders/cmesh_t3v4x2.spv";
@@ -918,8 +1007,8 @@ private:
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
-    pipelineLayoutInfo.pSetLayouts            = a_dslayouts.data(); //&descriptorSetLayout;
-    pipelineLayoutInfo.setLayoutCount         = uint32_t(a_dslayouts.size());
+    pipelineLayoutInfo.pSetLayouts            = &a_dslayout; //&descriptorSetLayout;
+    pipelineLayoutInfo.setLayoutCount         = 1;
 
     if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
       throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
@@ -1039,10 +1128,11 @@ private:
 
   
   void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float4x4 a_lightMatrix,
-                    bool a_drawGround, VkPipelineLayout a_layout)
+                    bool a_drawToShadowMap)
   {
     LiteMath::float3 a_lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
     LiteMath::float4 a_planeEq  = m_light.planeEquation;
+    auto             a_layout   = pipelineLayout;
 
     // draw plane/terrain
     //
@@ -1061,9 +1151,9 @@ private:
       matrices[1] = a_lightMatrix;
     }
 
-    if (a_drawGround)
+    if (!a_drawToShadowMap)
     {
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + TERRAIN_TEX, 0, NULL);
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + TERRAIN_TEX, 0, NULL);
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
       m_pTerrainMesh->DrawCmd(a_cmdBuff);
     }
@@ -1075,7 +1165,9 @@ private:
       matrices[0]     = LiteMath::transpose(mWVP);
     }
 
-    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + STONE_TEX, 0, NULL);
+    if (!a_drawToShadowMap)
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + STONE_TEX, 0, NULL);
+    
     vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
     m_pTeapotMesh->DrawCmd(a_cmdBuff);
 
@@ -1087,7 +1179,9 @@ private:
       matrices[0]     = LiteMath::transpose(mWVP);
     }
 
-    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + METAL_TEX, 0, NULL);
+    if (!a_drawToShadowMap)
+      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + METAL_TEX, 0, NULL);
+    
     vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
     m_pBunnyMesh->DrawCmd(a_cmdBuff);
   }
@@ -1121,7 +1215,7 @@ private:
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
-      DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float4x4(), false, a_layout);
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float4x4(), true);
 
       m_pShadowMap->EndRenderingToThisTexture(a_cmdBuff);
 
@@ -1154,7 +1248,7 @@ private:
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
-      DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightMatrix, true, a_layout);
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightMatrix, false);
 
       vkCmdEndRenderPass(a_cmdBuff);
     }
