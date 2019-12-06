@@ -1140,7 +1140,7 @@ private:
 
     {
       matrices[2].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
-      matrices[2].row[1] = LiteMath::to_float4(a_lightDir, 2.0f*m_light.lightTargetDist);
+      matrices[2].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);
       matrices[2].row[2] = a_planeEq;
     }
 
@@ -1209,9 +1209,8 @@ private:
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
 
-      const float r       = m_light.radius;
       auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();
-      auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, -m_light.lightTargetDist, m_light.lightTargetDist);
+      auto mProj          = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
