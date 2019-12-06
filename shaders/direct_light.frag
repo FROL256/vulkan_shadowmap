@@ -20,12 +20,15 @@ layout(push_constant) uniform params_t
   mat4 mProj;  
   vec4 wCamPos;
   vec4 lightDir;
+  vec4 lightPlaneEq;
 
 } params;
 
 void main()
 {
-  const float dpFactor = max(dot(params.lightDir.xyz, surf.wNorm), 0.0f);
+  const float dpFactor      = max(dot(params.lightDir.xyz, surf.wNorm), 0.0f);
+  const float lightDistMult = params.lightDir.w;
+  const float distToLightPlane = dot(params.lightPlaneEq.xyz, surf.wPos) + params.lightPlaneEq.w;
 
   const float cosPower = 120.0f;
   const vec3  v        = normalize(surf.wPos - params.wCamPos.xyz);

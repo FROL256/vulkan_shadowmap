@@ -213,9 +213,16 @@ private:
       lightTargetDist = 20.0f;
     }
   
+    void UpdatePlaneEquation()
+    {
+      planeEquation   = LiteMath::to_float4(cam.forward(), 0.0f); // A = n.x; B = n.y; C = n.z;
+      planeEquation.w = -LiteMath::dot(cam.pos, cam.forward());   // D = -(A*p.x + B*p.y + C*P.z);
+    }
+
     float  radius;
     float  lightTargetDist;
     Camera cam;
+    LiteMath::float4 planeEquation;
   
   } m_light;
   
@@ -498,8 +505,8 @@ private:
     m_pTeapotMesh  = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
     m_pBunnyMesh   = std::make_shared< vk_geom::CompactMesh_T3V4x2F >();
 
-    auto meshData = cmesh::CreateQuad(64, 64, 4.0f);
-    auto teapData = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
+    auto meshData  = cmesh::CreateQuad(64, 64, 4.0f);
+    auto teapData  = cmesh::LoadMeshFromVSGF("data/teapot.vsgf");
     auto bunnyData = cmesh::LoadMeshFromVSGF("data/bunny0.vsgf");
 
     if(teapData.VerticesNum() == 0)
@@ -538,8 +545,6 @@ private:
 
     CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap, layouts, m_pTerrainMesh->VertexInputLayout(),
                             &pipelineLayout, &graphicsPipeline, &graphicsPipelineShadow);
-
-    
 
     // create command buffers for rendering
     {
@@ -906,7 +911,7 @@ private:
     VkPushConstantRange pcRange = {};   
     pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     pcRange.offset     = 0;
-    pcRange.size       = 16*2*sizeof(float) + 8*sizeof(float);
+    pcRange.size       = 16*3*sizeof(float);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1033,28 +1038,33 @@ private:
   }
 
   
-  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float3 a_lightDir, 
+  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float4x4 a_lightMatrix,
                     bool a_drawGround, VkPipelineLayout a_layout)
   {
+    LiteMath::float3 a_lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
+    LiteMath::float4 a_planeEq  = m_light.planeEquation;
+
     // draw plane/terrain
     //
     LiteMath::float4x4 matrices[3];
 
     {
       matrices[2].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
-      matrices[2].row[1] = LiteMath::to_float4(a_lightDir, 0.0f);
+      matrices[2].row[1] = LiteMath::to_float4(a_lightDir, 2.0f*m_light.lightTargetDist);
+      matrices[2].row[2] = a_planeEq;
     }
 
     {
       auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
       auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
       matrices[0] = LiteMath::transpose(mWVP);
+      matrices[1] = a_lightMatrix;
     }
 
     if (a_drawGround)
     {
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + TERRAIN_TEX, 0, NULL);
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 2 * 16 + 8 * sizeof(float), matrices);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
       m_pTerrainMesh->DrawCmd(a_cmdBuff);
     }
 
@@ -1066,7 +1076,7 @@ private:
     }
 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + STONE_TEX, 0, NULL);
-    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 2 * 16 + 8 * sizeof(float), matrices);
+    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
     m_pTeapotMesh->DrawCmd(a_cmdBuff);
 
     // draw bunny
@@ -1078,7 +1088,7 @@ private:
     }
 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSet + METAL_TEX, 0, NULL);
-    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 2 * 16 + 8 * sizeof(float), matrices);
+    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
     m_pBunnyMesh->DrawCmd(a_cmdBuff);
   }
   
@@ -1099,6 +1109,7 @@ private:
     //// draw scene to shadow map (don't draw plane/terrain in the shadowmap)
     //
     assert(m_pShadowMap != nullptr);
+    LiteMath::float4x4 lightMatrix;
     {
       m_pShadowMap->BeginRenderingToThisTexture(a_cmdBuff);
 
@@ -1110,9 +1121,12 @@ private:
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
-      DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float3(0,0,0), false, a_layout);
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float4x4(), false, a_layout);
 
       m_pShadowMap->EndRenderingToThisTexture(a_cmdBuff);
+
+      lightMatrix = mWorldViewProj;
+      m_light.UpdatePlaneEquation();
     }
 
     ///// draw final scene to screen
@@ -1140,8 +1154,7 @@ private:
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
-      LiteMath::float3 lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
-      DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightDir, true, a_layout);
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightMatrix, true, a_layout);
 
       vkCmdEndRenderPass(a_cmdBuff);
     }

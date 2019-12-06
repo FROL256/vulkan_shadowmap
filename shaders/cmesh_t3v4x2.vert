@@ -10,6 +10,7 @@ layout(push_constant) uniform params_t
   mat4 mWorldLightProj;  
   vec4 wCamPos;
   vec4 lightDir;
+  vec4 lightPlaneEq;
 
 } params;
 
