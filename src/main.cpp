@@ -1148,7 +1148,7 @@ private:
       auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
       auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
       matrices[0] = LiteMath::transpose(mWVP);
-      matrices[1] = a_lightMatrix;
+      matrices[1] = LiteMath::transpose(a_lightMatrix);
     }
 
     if (!a_drawToShadowMap)
