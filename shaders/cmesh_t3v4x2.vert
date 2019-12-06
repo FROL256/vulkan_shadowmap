@@ -49,5 +49,4 @@ void main(void)
   vOut.texCoord = vTexCoordAndTang.xy;
 
   gl_Position   = params.mWorldViewProj*vec4(vOut.wPos, 1.0);
-  gl_Position.y = -gl_Position.y;	// Vulkan coordinate system is different to OpenGL    
 }

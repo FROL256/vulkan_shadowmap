@@ -738,19 +738,31 @@ namespace LiteMath
     res.row[0].w = -(r + l) / (r - l);
  
     res.row[1].x = 0; 
-    res.row[1].y = 2.0f / (t - b); 
+    res.row[1].y = -2.0f / (t - b);  // why minus ??? check it for OpenGL please
     res.row[1].z = 0; 
     res.row[1].w = -(t + b) / (t - b);
  
     res.row[2].x = 0; 
     res.row[2].y = 0; 
-    res.row[2].z = -1.0f / (f - n); 
+    res.row[2].z = -2.0f / (f - n); 
     res.row[2].w = -(f + n) / (f - n); 
  
     res.row[3].x = 0.0f;
     res.row[3].y = 0.0f;
     res.row[3].z = 0.0f;
     res.row[3].w = 1.0f; 
+    return res;
+  }
+
+  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
+  //
+  static inline float4x4 vulkanProjectionMatrixFix()
+  {
+    float4x4 res;
+    res.identity();
+    res.row[1].y = -1.0f;
+    res.row[2].z = 0.5f;
+    res.row[2].w = 0.5f;
     return res;
   }
 

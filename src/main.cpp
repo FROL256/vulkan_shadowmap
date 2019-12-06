@@ -999,9 +999,9 @@ private:
 
     VkViewport viewport = {};
     viewport.x        = 0.0f;
-    viewport.y        = +(float)a_height;
+    viewport.y        = 0.0f;
     viewport.width    = +(float)a_width;
-    viewport.height   = -(float)a_height;
+    viewport.height   = +(float)a_height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1105,9 +1105,10 @@ private:
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
 
       const float r       = m_light.radius;
+      auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();
       auto mProj          = LiteMath::ortoMatrix(-r, +r, -r, +r, -m_light.lightTargetDist, m_light.lightTargetDist);
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
-      auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
+      auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float3(0,0,0), false, a_layout);
 
@@ -1134,9 +1135,10 @@ private:
       vkCmdBindPipeline   (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
+      auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
       auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f));
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
-      auto mWorldViewProj = LiteMath::mul(mProj, mLookAt);
+      auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
       LiteMath::float3 lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightDir, true, a_layout);
