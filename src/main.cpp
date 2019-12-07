@@ -216,17 +216,10 @@ private:
       radius          = 5.0f;
       lightTargetDist = 20.0f;
     }
-  
-    void UpdatePlaneEquation()
-    {
-      planeEquation   = LiteMath::to_float4(cam.forward(), 0.0f); // A = n.x; B = n.y; C = n.z;
-      planeEquation.w = -LiteMath::dot(cam.pos, cam.forward());   // D = -(A*p.x + B*p.y + C*P.z);
-    }
 
     float  radius;
     float  lightTargetDist;
     Camera cam;
-    LiteMath::float4 planeEquation;
   
   } m_light;
   
@@ -1004,7 +997,7 @@ private:
     VkPushConstantRange pcRange = {};   
     pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
     pcRange.offset     = 0;
-    pcRange.size       = 16*3*sizeof(float);
+    pcRange.size       = 16*4*sizeof(float);
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1135,31 +1128,30 @@ private:
                     bool a_drawToShadowMap)
   {
     LiteMath::float3 a_lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
-    LiteMath::float4 a_planeEq  = m_light.planeEquation;
     auto             a_layout   = pipelineLayout;
 
     // draw plane/terrain
     //
-    LiteMath::float4x4 matrices[3];
+    LiteMath::float4x4 matrices[4];
 
     {
-      matrices[2].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
-      matrices[2].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);
-      matrices[2].row[2] = a_planeEq;
+      matrices[3].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
+      matrices[3].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);
     }
 
     {
-      auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
+      auto mrot   = LiteMath::rotate_X_4x4(-LiteMath::DEG_TO_RAD*90.0f);
       auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
       auto mWVPL  = LiteMath::mul(a_lightMatrix, mrot);
       matrices[0] = LiteMath::transpose(mWVP);
       matrices[1] = LiteMath::transpose(mWVPL);
+      matrices[2] = LiteMath::transpose(mrot);
     }
 
     if (!a_drawToShadowMap)
     {
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + TERRAIN_TEX, 0, NULL);
-      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
+      vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 4 * 16, matrices);
       m_pTerrainMesh->DrawCmd(a_cmdBuff);
     }
 
@@ -1170,12 +1162,13 @@ private:
       auto mWVPL      = LiteMath::mul(a_lightMatrix, mtranslate);
       matrices[0]     = LiteMath::transpose(mWVP);
       matrices[1]     = LiteMath::transpose(mWVPL);
+      matrices[2]     = LiteMath::float4x4();
     }
 
     if (!a_drawToShadowMap)
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + STONE_TEX, 0, NULL);
     
-    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
+    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 4 * 16, matrices);
     m_pTeapotMesh->DrawCmd(a_cmdBuff);
 
     // draw bunny
@@ -1186,12 +1179,13 @@ private:
       auto mWVPL      = LiteMath::mul(a_lightMatrix,    LiteMath::mul(mtranslate, mscale));
       matrices[0]     = LiteMath::transpose(mWVP);
       matrices[1]     = LiteMath::transpose(mWVPL);
+      matrices[2]     = LiteMath::float4x4();
     }
 
     if (!a_drawToShadowMap)
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + METAL_TEX, 0, NULL);
     
-    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 3 * 16, matrices);
+    vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 4 * 16, matrices);
     m_pBunnyMesh->DrawCmd(a_cmdBuff);
   }
   
@@ -1229,7 +1223,6 @@ private:
       m_pShadowMap->EndRenderingToThisTexture(a_cmdBuff);
 
       lightMatrix = mWorldViewProj;
-      m_light.UpdatePlaneEquation();
     }
 
     ///// draw final scene to screen

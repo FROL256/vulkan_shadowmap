@@ -7,7 +7,9 @@ layout(location = 1) in vec4 vTexCoordAndTang;
 layout(push_constant) uniform params_t
 {
   mat4 mWorldViewProj;
-  mat4 mWorldLightProj;  
+  mat4 mWorldLightProj; 
+  mat4 mNormalMatrix; 
+
   vec4 wCamPos;
   vec4 lightDir;
   vec4 lightPlaneEq;
@@ -44,9 +46,12 @@ layout (location = 0 ) out VS_OUT
 
 void main(void)
 { 
+  const vec4 wNorm = vec4(DecodeNormal(floatBitsToInt(vPosNorm.w)),         0.0f);
+  const vec4 wTang = vec4(DecodeNormal(floatBitsToInt(vTexCoordAndTang.z)), 0.0f);
+
   vOut.wPos     = vPosNorm.xyz;
-  vOut.wNorm    = DecodeNormal(floatBitsToInt(vPosNorm.w));
-  vOut.wTangent = DecodeNormal(floatBitsToInt(vTexCoordAndTang.z));
+  vOut.wNorm    = (params.mNormalMatrix*wNorm).xyz;
+  vOut.wTangent = (params.mNormalMatrix*wTang).xyz;
   vOut.texCoord = vTexCoordAndTang.xy;
 
   gl_Position   = params.mWorldViewProj*vec4(vOut.wPos, 1.0);

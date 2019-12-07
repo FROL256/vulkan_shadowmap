@@ -18,7 +18,9 @@ layout (binding = 1) uniform sampler2D shadowMap;
 layout(push_constant) uniform params_t
 {
   mat4 mWorldViewProj;
-  mat4 mWorldLightProj;  
+  mat4 mWorldLightProj;
+  mat4 mNormalMatrix; 
+    
   vec4 wCamPos;
   vec4 lightDir;
   vec4 lightPlaneEq;
