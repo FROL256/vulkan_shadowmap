@@ -489,10 +489,10 @@ VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_dev
     samplerInfo.flags            = 0;
     samplerInfo.magFilter        = VK_FILTER_LINEAR;
     samplerInfo.minFilter        = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode       = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.addressModeU     = isDepthTexture ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV     = isDepthTexture ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;;
-    samplerInfo.addressModeW     = isDepthTexture ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;;
+    samplerInfo.mipmapMode       = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.addressModeU     = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; 
+    samplerInfo.addressModeV     = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; 
+    samplerInfo.addressModeW     = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.mipLodBias       = 0.0f;
     samplerInfo.compareOp        = VK_COMPARE_OP_NEVER;
     samplerInfo.minLod           = 0;

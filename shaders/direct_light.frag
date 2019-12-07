@@ -27,27 +27,11 @@ layout(push_constant) uniform params_t
 
 void main()
 {
-  const float lightDistMult = params.lightDir.w;
-  const float distToLightPlane = (dot(params.lightPlaneEq.xyz, surf.wPos) + params.lightPlaneEq.w) / sqrt( dot(params.lightPlaneEq.xyz,params.lightPlaneEq.xyz) );
-
   const vec4 posLightClipSpace = params.mWorldLightProj*vec4(surf.wPos, 1.0f);
-  //const vec2 shadowTexCoord = (posLightClipSpace.xy/posLightClipSpace.w)*0.5f + vec2(0.5f, 0.5f);
-  const vec2 shadowTexCoord = (posLightClipSpace.xy)*0.5f + vec2(0.5f, 0.5f); // orto matrix, we don't need perspective division 
+  const vec2 shadowTexCoord    = (posLightClipSpace.xy/posLightClipSpace.w)*0.5f + vec2(0.5f, 0.5f); //  for orto matrix, we don't need perspective division, you can remove it if you want; this is general case;
 
-  float shadow = 1.0f;
-
-  if(shadowTexCoord.x < 0.0f || shadowTexCoord.x > 1.0f || shadowTexCoord.y < 0.0f || shadowTexCoord.y > 1.0f)
-    shadow = 1.0f;
-  else
-  {
-    //const float shadowDepth = textureLod(shadowMap, shadowTexCoord, 0).x;
-    //shadow = (shadowDepth < 1.0f) ? 0.25f : 0.75f;
-  
-    const float shadowDepth      = textureLod(shadowMap, shadowTexCoord, 0).x*params.lightDir.w; // lightDir.w stores light box depth size
-    const float bias             = 0.01f;
-    
-    shadow = (distToLightPlane < shadowDepth + bias) ? 1.0f : 0.0f;   
-  }
+  const bool  outOfView = (shadowTexCoord.x < 0.001f || shadowTexCoord.x > 0.999f || shadowTexCoord.y < 0.001f || shadowTexCoord.y > 0.999f);
+  const float shadow    = ((posLightClipSpace.z < textureLod(shadowMap, shadowTexCoord, 0).x + 0.0005f) || outOfView) ? 1.0f : 0.0f;   
 
   const float dpFactor = max(dot(params.lightDir.xyz, surf.wNorm), 0.0f);
   const float cosPower = 120.0f;
