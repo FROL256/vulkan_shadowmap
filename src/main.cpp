@@ -69,6 +69,10 @@ void OnKeyboardPressed(GLFWwindow* window, int key, int scancode, int action, in
     g_input.camMoveSpeed = 10.0f;
   break;
 
+  case GLFW_KEY_LEFT_CONTROL:
+    g_input.camMoveSpeed = 1.0f;
+  break;
+
 	case GLFW_KEY_SPACE: 
 		break;
   case GLFW_KEY_1:
@@ -1147,8 +1151,9 @@ private:
     {
       auto mrot   = LiteMath::rotate_X_4x4(LiteMath::DEG_TO_RAD*90.0f);
       auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
+      auto mWVPL  = LiteMath::mul(a_lightMatrix, mrot);
       matrices[0] = LiteMath::transpose(mWVP);
-      matrices[1] = LiteMath::transpose(a_lightMatrix);
+      matrices[1] = LiteMath::transpose(mWVPL);
     }
 
     if (!a_drawToShadowMap)
@@ -1162,7 +1167,9 @@ private:
     {
       auto mtranslate = LiteMath::translate4x4({ -0.5f, 0.4f, -0.5f });
       auto mWVP       = LiteMath::mul(a_mWorldViewProj, mtranslate);
+      auto mWVPL      = LiteMath::mul(a_lightMatrix, mtranslate);
       matrices[0]     = LiteMath::transpose(mWVP);
+      matrices[1]     = LiteMath::transpose(mWVPL);
     }
 
     if (!a_drawToShadowMap)
@@ -1176,7 +1183,9 @@ private:
       auto mtranslate = LiteMath::translate4x4({ +1.25f, 0.6f, 0.5f });
       auto mscale     = LiteMath::scale4x4({ 75.0, 75.0, 75.0 });
       auto mWVP       = LiteMath::mul(a_mWorldViewProj, LiteMath::mul(mtranslate, mscale));
+      auto mWVPL      = LiteMath::mul(a_lightMatrix,    LiteMath::mul(mtranslate, mscale));
       matrices[0]     = LiteMath::transpose(mWVP);
+      matrices[1]     = LiteMath::transpose(mWVPL);
     }
 
     if (!a_drawToShadowMap)
@@ -1211,6 +1220,7 @@ private:
 
       auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();
       auto mProj          = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
+      //auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_light.cam.fov, 1.0f, 0.1f, 1000.0f));
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
