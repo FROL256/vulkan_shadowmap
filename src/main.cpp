@@ -205,6 +205,7 @@ private:
 
   size_t currentFrame = 0;
   Camera m_cam;
+
   struct ShadowMapCam
   {
     ShadowMapCam() 
@@ -226,6 +227,8 @@ private:
   } m_light;
   
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   struct CopyEngine : public vk_geom::ICopyEngine, 
                       public vk_texture::ICopyEngine
   {
@@ -239,6 +242,8 @@ private:
     vk_copy::SimpleCopyHelper m_helper;
   };
 
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   std::unique_ptr<CopyEngine>       m_pCopyHelper;
   std::shared_ptr<vk_geom::IMesh>   m_pTerrainMesh;
@@ -1051,7 +1056,7 @@ private:
     // create similar pipeline for shadow map. But now we do not attach pixel shader.
     //
     CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), 
-                          a_shadowTex->RenderPass(), uint32_t(a_shadowTex->Width()), uint32_t(a_shadowTex->Height()), vs_path, nullptr,
+                          a_shadowTex->Renderpass(), uint32_t(a_shadowTex->Width()), uint32_t(a_shadowTex->Height()), vs_path, nullptr,
                           a_pPipelineShadow);
   }
 

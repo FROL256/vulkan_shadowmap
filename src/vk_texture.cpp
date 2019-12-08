@@ -527,7 +527,7 @@ void vk_texture::RenderableTexture2D::CreateRenderPass()
   colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
   colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  colorAttachment.initialLayout  = this->RenderAttachmentLayout();
+  colorAttachment.initialLayout  = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
   VkAttachmentReference colorAttachmentRef = {};
@@ -599,7 +599,7 @@ void vk_texture::RenderableTexture2D::BeginRenderingToThisTexture(VkCommandBuffe
 {
   const bool isDepthTexture = vk_utils::IsDepthFormat(m_format);
 
-  if(m_currentLayout != RenderAttachmentLayout())
+  if(m_currentLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) // we assume the texture is always should be in VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL. render pass will use different intermediate layout.
   {
     VkImageMemoryBarrier imgBar = {};
 
@@ -610,7 +610,7 @@ void vk_texture::RenderableTexture2D::BeginRenderingToThisTexture(VkCommandBuffe
     imgBar.srcAccessMask       = 0;  
     imgBar.dstAccessMask       = 0; // VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     imgBar.oldLayout           = m_currentLayout;
-    imgBar.newLayout           = RenderAttachmentLayout();
+    imgBar.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     imgBar.image               = m_image;
 
     imgBar.subresourceRange.aspectMask     = isDepthTexture ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
@@ -621,19 +621,19 @@ void vk_texture::RenderableTexture2D::BeginRenderingToThisTexture(VkCommandBuffe
 
     vkCmdPipelineBarrier(a_cmdBuff,
                          VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          0,
                          0, nullptr,
                          0, nullptr,
                          1, &imgBar);
 
-    m_currentLayout = RenderAttachmentLayout();
-    m_currentStage  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    m_currentStage  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT; // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
   }
 
   VkRenderPassBeginInfo renderPassInfo = {};
   renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassInfo.renderPass        = this->RenderPass();
+  renderPassInfo.renderPass        = this->Renderpass();
   renderPassInfo.framebuffer       = this->Framebuffer();
   renderPassInfo.renderArea.offset = { 0, 0 };
   renderPassInfo.renderArea.extent = VkExtent2D{ uint32_t(this->Width()), uint32_t(this->Height()) };

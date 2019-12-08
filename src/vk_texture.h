@@ -100,7 +100,7 @@ namespace vk_texture
     VkImageLayout        Layout()     const { return m_currentLayout; }
     VkPipelineStageFlags Stage()      const { return m_currentStage; }
 
-    VkRenderPass         RenderPass() const { return m_renderPass; }
+    VkRenderPass         Renderpass() const { return m_renderPass; }
     VkFramebuffer        Framebuffer() const { return m_fbo;  }
 
   protected:
