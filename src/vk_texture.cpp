@@ -443,7 +443,6 @@ vk_texture::RenderableTexture2D::~RenderableTexture2D()
   vkDestroySampler    (m_device, m_sampler, NULL); m_sampler = nullptr;
 
   m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  m_currentStage  = 0;
 }
 
 
@@ -475,9 +474,7 @@ VkMemoryRequirements vk_texture::RenderableTexture2D::CreateImage(VkDevice a_dev
   imgCreateInfo.arrayLayers   = 1;
 
   VK_CHECK_RESULT(vkCreateImage(a_device, &imgCreateInfo, nullptr, &m_image));
-
   m_currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  m_currentStage  = 0;
 
   VkMemoryRequirements memoryRequirements;
   vkGetImageMemoryRequirements(a_device, m_image, &memoryRequirements);
@@ -628,7 +625,6 @@ void vk_texture::RenderableTexture2D::BeginRenderingToThisTexture(VkCommandBuffe
                          1, &imgBar);
 
     m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    m_currentStage  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT; // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
   }
 
   VkRenderPassBeginInfo renderPassInfo = {};
@@ -651,9 +647,8 @@ void vk_texture::RenderableTexture2D::BeginRenderingToThisTexture(VkCommandBuffe
   vkCmdBeginRenderPass(a_cmdBuff, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void vk_texture::RenderableTexture2D::EndRenderingToThisTexture(VkCommandBuffer a_cmdBuff, VkPipelineStageFlagBits a_endStageFlags)
+void vk_texture::RenderableTexture2D::EndRenderingToThisTexture(VkCommandBuffer a_cmdBuff)
 {
   vkCmdEndRenderPass(a_cmdBuff);
-  m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  m_currentStage  = a_endStageFlags;   
+  m_currentLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;   
 }

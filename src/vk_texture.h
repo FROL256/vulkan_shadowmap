@@ -84,7 +84,7 @@ namespace vk_texture
     void                 BindMemory(VkDeviceMemory a_memStorage, size_t a_offset);
 
     void                 BeginRenderingToThisTexture(VkCommandBuffer a_cmdBuff);
-    void                 EndRenderingToThisTexture(VkCommandBuffer a_cmdBuff, VkPipelineStageFlagBits a_endStageFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    void                 EndRenderingToThisTexture(VkCommandBuffer a_cmdBuff);
 
     //// information functions
     //
@@ -98,7 +98,6 @@ namespace vk_texture
     VkFormat             Format()     const { return m_format; }
 
     VkImageLayout        Layout()     const { return m_currentLayout; }
-    VkPipelineStageFlags Stage()      const { return m_currentStage; }
 
     VkRenderPass         Renderpass() const { return m_renderPass; }
     VkFramebuffer        Framebuffer() const { return m_fbo;  }
@@ -122,9 +121,7 @@ namespace vk_texture
     int m_mipLevels;
 
     VkImageCreateInfo    m_createImageInfo;
-
     VkImageLayout        m_currentLayout;
-    VkPipelineStageFlags m_currentStage;
 
   };
 
