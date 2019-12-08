@@ -215,11 +215,13 @@ private:
   
       radius          = 5.0f;
       lightTargetDist = 20.0f;
+      usePerspectiveM = false;
     }
 
-    float  radius;
+    float  radius;           ///!< ignored when usePerspectiveM == true 
     float  lightTargetDist;
     Camera cam;
+    bool   usePerspectiveM;
   
   } m_light;
   
@@ -435,7 +437,7 @@ private:
     auto memReqTex1 = m_pTex[TERRAIN_TEX]->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex2 = m_pTex[STONE_TEX]->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex3 = m_pTex[METAL_TEX]->CreateImage(device, w3, h3, VK_FORMAT_R8G8B8A8_UNORM);
-    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D16_UNORM);
+    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D16_UNORM); 
 
     assert(memReqTex1.memoryTypeBits == memReqTex2.memoryTypeBits);
     assert(memReqTex1.memoryTypeBits == memReqTex3.memoryTypeBits);
@@ -1212,9 +1214,13 @@ private:
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
 
-      auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();
-      auto mProj          = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
-      //auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_light.cam.fov, 1.0f, 0.1f, 1000.0f));
+      LiteMath::float4x4 mProj;
+      if(m_light.usePerspectiveM)
+        mProj = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f));
+      else
+        mProj = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
+        
+      auto mProjFix       = m_light.usePerspectiveM ? LiteMath::float4x4() : LiteMath::vulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
       auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 

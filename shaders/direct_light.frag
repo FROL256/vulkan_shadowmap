@@ -30,10 +30,11 @@ layout(push_constant) uniform params_t
 void main()
 {
   const vec4 posLightClipSpace = params.mWorldLightProj*vec4(surf.wPos, 1.0f);
-  const vec2 shadowTexCoord    = (posLightClipSpace.xy/posLightClipSpace.w)*0.5f + vec2(0.5f, 0.5f); //  for orto matrix, we don't need perspective division, you can remove it if you want; this is general case;
+  const vec2 shadowTexCoord    = (posLightClipSpace.xy/posLightClipSpace.w)*0.5f + vec2(0.5f, 0.5f); // for orto matrix, we don't need perspective division, you can remove it if you want; this is general case;
+  const float posLightClipZ    = (posLightClipSpace.z/posLightClipSpace.w);                          // for orto matrix, we don't need perspective division, you can remove it if you want; this is general case;
 
   const bool  outOfView = (shadowTexCoord.x < 0.001f || shadowTexCoord.x > 0.999f || shadowTexCoord.y < 0.001f || shadowTexCoord.y > 0.999f);
-  const float shadow    = ((posLightClipSpace.z < textureLod(shadowMap, shadowTexCoord, 0).x + 0.0005f) || outOfView) ? 1.0f : 0.0f;   
+  const float shadow    = ((posLightClipZ < textureLod(shadowMap, shadowTexCoord, 0).x + 0.001f) || outOfView) ? 1.0f : 0.0f;  
 
   const float dpFactor = max(dot(params.lightDir.xyz, surf.wNorm), 0.0f);
   const float cosPower = 120.0f;
