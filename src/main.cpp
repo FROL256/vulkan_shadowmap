@@ -483,42 +483,26 @@ private:
     // DS for drawing objects
     //
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
-    {
-      m_pBindings->BindImage(0, m_pTex[TERRAIN_TEX]->View(), m_pTex[TERRAIN_TEX]->Sampler());
-      m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
-    }
-    auto terrain_BindId = m_pBindings->BindEnd();
+    m_pBindings->BindImage(0, m_pTex[TERRAIN_TEX]->View(), m_pTex[TERRAIN_TEX]->Sampler());
+    m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindEnd(&descriptorSetWithSM[TERRAIN_TEX], &descriptorSetLayoutSM);
 
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
-    {
-      m_pBindings->BindImage(0, m_pTex[STONE_TEX]->View(), m_pTex[STONE_TEX]->Sampler());
-      m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
-    }
-    auto stone_BindId = m_pBindings->BindEnd();
+    m_pBindings->BindImage(0, m_pTex[STONE_TEX]->View(), m_pTex[STONE_TEX]->Sampler());
+    m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindEnd(&descriptorSetWithSM[STONE_TEX]);
 
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
-    {
-      m_pBindings->BindImage(0, m_pTex[METAL_TEX]->View(), m_pTex[METAL_TEX]->Sampler());
-      m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
-    }
-    auto metal_BindId = m_pBindings->BindEnd();
-
-    descriptorSetLayoutSM            = m_pBindings->DSetLayout(terrain_BindId);
-    descriptorSetWithSM[TERRAIN_TEX] = m_pBindings->DSet(terrain_BindId);
-    descriptorSetWithSM[STONE_TEX]   = m_pBindings->DSet(stone_BindId);
-    descriptorSetWithSM[METAL_TEX]   = m_pBindings->DSet(metal_BindId);
+    m_pBindings->BindImage(0, m_pTex[METAL_TEX]->View(), m_pTex[METAL_TEX]->Sampler());
+    m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindEnd(&descriptorSetWithSM[METAL_TEX]);
 
     // DS for srawing quad
     //
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
-    {
-      m_pBindings->BindImage(0, m_pShadowMap->View(), m_pShadowMap->Sampler());
-    }
-    auto shadowmapToQuad_BindId = m_pBindings->BindEnd();
+    m_pBindings->BindImage(0, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindEnd(&descriptorSet[SHADOW_MAP], &descriptorSetLayout);
     
-    descriptorSetLayout       = m_pBindings->DSetLayout(shadowmapToQuad_BindId);
-    descriptorSet[SHADOW_MAP] = m_pBindings->DSet(shadowmapToQuad_BindId);
-
 
     m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
     m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout

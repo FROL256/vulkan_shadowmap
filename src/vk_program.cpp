@@ -65,7 +65,7 @@ void  vk_utils::ProgramBindings::BindImage(uint32_t a_loc, VkImageView a_imageVi
   m_currBindings[a_loc] = bind;
 }
 
-vk_utils::DSetId vk_utils::ProgramBindings::BindEnd()
+vk_utils::DSetId vk_utils::ProgramBindings::BindEnd(VkDescriptorSet* a_pSet, VkDescriptorSetLayout* a_pLayout)
 {
   // create DS layout key
   //
@@ -155,6 +155,12 @@ vk_utils::DSetId vk_utils::ProgramBindings::BindEnd()
 
   vkUpdateDescriptorSets(m_device, uint32_t(writeDescriptorSet.size()), writeDescriptorSet.data(), 0, NULL);
   
+  if(a_pSet != nullptr)
+    (*a_pSet) = ds;
+
+  if(a_pLayout != nullptr)
+    (*a_pLayout) = layout;
+
   // return an id that we can use to retrieve same descriptor set later
   //
   DSetId res;
@@ -163,7 +169,7 @@ vk_utils::DSetId vk_utils::ProgramBindings::BindEnd()
   return res;
 }
 
-VkDescriptorSetLayout vk_utils::ProgramBindings::DSetLayout(const DSetId& a_setId) const
+VkDescriptorSetLayout vk_utils::ProgramBindings::DLayout(const DSetId& a_setId) const
 {
   auto p = m_dsLayouts.find(a_setId.key);
   if(p == m_dsLayouts.end())
