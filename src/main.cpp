@@ -24,6 +24,7 @@
 #include "vk_copy.h"
 #include "vk_texture.h"
 #include "vk_quad.h"
+#include "vk_program.h"
 #include "Bitmap.h"
 
 #include "Camera.h"
@@ -262,10 +263,11 @@ private:
   // A single descriptor represents a single resource, and several descriptors are organized
   // into descriptor sets, which are basically just collections of descriptors.
   // 
-  VkDescriptorPool      descriptorPool = nullptr;
   VkDescriptorSet       descriptorSet[DESCRIPTORS_NUM] = {}; // for our textures
   VkDescriptorSet       descriptorSetWithSM[TEXTURES_NUM] = {};
   VkDescriptorSetLayout descriptorSetLayout = nullptr, descriptorSetLayoutSM = nullptr;
+
+  std::shared_ptr<vk_utils::ProgramBindings> m_pBindings = nullptr;
 
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -396,6 +398,11 @@ private:
     vk_utils::CreateScreenImageViews(device, &screen);
 
     m_pCopyHelper = std::make_unique<CopyEngine>(physicalDevice, device, transferQueue, 64*1024*1024);
+
+    VkDescriptorType dtypes[2] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER };
+    m_pBindings = std::make_shared<vk_utils::ProgramBindings>(device, dtypes, 2, 64);
+
+    int a = 2;
   }
 
   void CreateResources()
@@ -417,9 +424,6 @@ private:
                                                     VK_ATTACHMENT_LOAD_OP_LOAD, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR });
   
     CreateSyncObjects(device, &m_sync);
-
-    CreateDescriptorSetLayoutForSingleTexture(device, &descriptorSetLayout);
-    CreateDescriptorSetLayoutForTextureAndShadowMap(device, &descriptorSetLayoutSM);
 
     // create textures
     //
@@ -475,14 +479,46 @@ private:
     m_pTex[2]->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size);
     m_pShadowMap->BindMemory(m_memShadowMap, 0);
 
-    VkSampler samplers[] = { m_pTex[0]->Sampler(), m_pTex[1]->Sampler(), m_pTex[2]->Sampler(), m_pShadowMap->Sampler()};
-    VkImageView views [] = { m_pTex[0]->View(),    m_pTex[1]->View(),    m_pTex[2]->View(),    m_pShadowMap->View() };
 
-    CreateDescriptorSetsForImages(device, descriptorSetLayout, samplers, views, DESCRIPTORS_NUM,
-                                  &descriptorPool, descriptorSet);
+    // DS for drawing objects
+    //
+    m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
+    {
+      m_pBindings->BindImage(0, m_pTex[TERRAIN_TEX]->View(), m_pTex[TERRAIN_TEX]->Sampler());
+      m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    }
+    auto terrain_BindId = m_pBindings->BindEnd();
 
-    CreateDescriptorSetsForImagesWithSM(device, descriptorSetLayoutSM, descriptorPool, samplers, views, m_pShadowMap->Sampler(), m_pShadowMap->View(), TEXTURES_NUM,
-                                        descriptorSetWithSM);
+    m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
+    {
+      m_pBindings->BindImage(0, m_pTex[STONE_TEX]->View(), m_pTex[STONE_TEX]->Sampler());
+      m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    }
+    auto stone_BindId = m_pBindings->BindEnd();
+
+    m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
+    {
+      m_pBindings->BindImage(0, m_pTex[METAL_TEX]->View(), m_pTex[METAL_TEX]->Sampler());
+      m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    }
+    auto metal_BindId = m_pBindings->BindEnd();
+
+    descriptorSetLayoutSM            = m_pBindings->DSetLayout(terrain_BindId);
+    descriptorSetWithSM[TERRAIN_TEX] = m_pBindings->DSet(terrain_BindId);
+    descriptorSetWithSM[STONE_TEX]   = m_pBindings->DSet(stone_BindId);
+    descriptorSetWithSM[METAL_TEX]   = m_pBindings->DSet(metal_BindId);
+
+    // DS for srawing quad
+    //
+    m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
+    {
+      m_pBindings->BindImage(0, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    }
+    auto shadowmapToQuad_BindId = m_pBindings->BindEnd();
+    
+    descriptorSetLayout       = m_pBindings->DSetLayout(shadowmapToQuad_BindId);
+    descriptorSet[SHADOW_MAP] = m_pBindings->DSet(shadowmapToQuad_BindId);
+
 
     m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
     m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
@@ -616,9 +652,10 @@ private:
   
     m_pCopyHelper  = nullptr; // smart pointer will destroy resources
     m_pTerrainMesh = nullptr; // smart pointer will destroy resources
-    m_pTeapotMesh  = nullptr;
-    m_pBunnyMesh   = nullptr;
-    m_pFSQuad      = nullptr;
+    m_pTeapotMesh  = nullptr; // smart pointer will destroy resources
+    m_pBunnyMesh   = nullptr; // smart pointer will destroy resources
+    m_pFSQuad      = nullptr; // smart pointer will destroy resources
+    m_pBindings    = nullptr; // smart pointer will destroy resources
 
     // free our vbos
     vkFreeMemory(device, m_memAllMeshes, NULL);
@@ -634,15 +671,6 @@ private:
       vkFreeMemory      (device, depthImageMemory, NULL);
       vkDestroyImageView(device, depthImageView, NULL);
       vkDestroyImage    (device, depthImage, NULL);
-    }
-
-    if (descriptorPool != nullptr)
-      vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-
-    if (descriptorSetLayout != nullptr)
-    {
-      vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
-      vkDestroyDescriptorSetLayout(device, descriptorSetLayoutSM, NULL);
     }
 
     if (enableValidationLayers)
@@ -688,175 +716,6 @@ private:
 
     glfwTerminate();
   }
-
-  static void CreateDescriptorSetLayoutForSingleTexture(VkDevice a_device, VkDescriptorSetLayout *a_pDSLayout)
-  {
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[1];
-  
-    descriptorSetLayoutBinding[0].binding            = 0;
-    descriptorSetLayoutBinding[0].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorSetLayoutBinding[0].descriptorCount    = 1;
-    descriptorSetLayoutBinding[0].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
-    descriptorSetLayoutBinding[0].pImmutableSamplers = nullptr;
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-    descriptorSetLayoutCreateInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.bindingCount = 1;
-    descriptorSetLayoutCreateInfo.pBindings    = descriptorSetLayoutBinding;
-
-    // Create the descriptor set layout.
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, a_pDSLayout));
-  }
-
-  static void CreateDescriptorSetLayoutForTextureAndShadowMap(VkDevice a_device, VkDescriptorSetLayout *a_pDSLayout)
-  {
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding[2];
-
-    descriptorSetLayoutBinding[0].binding            = 0;
-    descriptorSetLayoutBinding[0].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorSetLayoutBinding[0].descriptorCount    = 1;
-    descriptorSetLayoutBinding[0].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
-    descriptorSetLayoutBinding[0].pImmutableSamplers = nullptr;
-
-    descriptorSetLayoutBinding[1].binding            = 1;
-    descriptorSetLayoutBinding[1].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorSetLayoutBinding[1].descriptorCount    = 1;
-    descriptorSetLayoutBinding[1].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
-    descriptorSetLayoutBinding[1].pImmutableSamplers = nullptr;
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-    descriptorSetLayoutCreateInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.bindingCount = 2;
-    descriptorSetLayoutCreateInfo.pBindings    = descriptorSetLayoutBinding;
-
-    // Create the descriptor set layout.
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(a_device, &descriptorSetLayoutCreateInfo, NULL, a_pDSLayout));
-  }
-
-  void CreateDescriptorSetsForImages(VkDevice a_device, const VkDescriptorSetLayout a_dsLayout, VkSampler* a_samplers, VkImageView *a_views, int a_imagesNumber,
-                                     VkDescriptorPool* a_pDSPool, VkDescriptorSet* a_pDS)
-  {
-    assert(a_pDSPool   != nullptr);
-    assert(a_pDS       != nullptr);
-
-    assert(a_samplers != nullptr);
-    assert(a_views    != nullptr);
-    assert(a_imagesNumber != 0);
-
-    std::vector<VkDescriptorPoolSize> descriptorPoolSize(a_imagesNumber*2);
-    for(int i=0;i<descriptorPoolSize.size();i++)
-    {
-      descriptorPoolSize[i].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-      descriptorPoolSize[i].descriptorCount = 2;
-    }
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {};
-    descriptorPoolCreateInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.maxSets       = a_imagesNumber*2; // we need to allocate at least 1 descriptor set
-    descriptorPoolCreateInfo.poolSizeCount = uint32_t(descriptorPoolSize.size());
-    descriptorPoolCreateInfo.pPoolSizes    = descriptorPoolSize.data();
-
-    VK_CHECK_RESULT(vkCreateDescriptorPool(a_device, &descriptorPoolCreateInfo, NULL, a_pDSPool));
-
-    // With the pool allocated, we can now allocate the descriptor set.
-    //
-    std::vector<VkDescriptorSetLayout> layouts(a_imagesNumber);
-    for(int i=0;i<layouts.size();i++)
-      layouts[i] = a_dsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
-    descriptorSetAllocateInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool     = (*a_pDSPool);   // pool to allocate from.
-    descriptorSetAllocateInfo.descriptorSetCount = a_imagesNumber; // allocate a descriptor set for buffer and image
-    descriptorSetAllocateInfo.pSetLayouts        = layouts.data();
-
-    // allocate descriptor set.
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(a_device, &descriptorSetAllocateInfo, a_pDS));
-
-    // Next, we need to connect our actual texture with the descriptor.
-    // We use vkUpdateDescriptorSets() to update the descriptor set.
-    //
-    
-    std::vector<VkDescriptorImageInfo> descriptorImageInfos(a_imagesNumber);
-    std::vector<VkWriteDescriptorSet>  writeDescriptorSets (a_imagesNumber);
-
-    for(int imageId = 0; imageId < a_imagesNumber; imageId++)
-    {
-      descriptorImageInfos[imageId]             = VkDescriptorImageInfo{};
-      descriptorImageInfos[imageId].sampler     = a_samplers[imageId];
-      descriptorImageInfos[imageId].imageView   = a_views   [imageId];
-      descriptorImageInfos[imageId].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-      writeDescriptorSets[imageId]                 = VkWriteDescriptorSet{};
-      writeDescriptorSets[imageId].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      writeDescriptorSets[imageId].dstSet          = a_pDS[imageId]; 
-      writeDescriptorSets[imageId].dstBinding      = 0;              
-      writeDescriptorSets[imageId].descriptorCount = 1;              
-      writeDescriptorSets[imageId].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // image.
-      writeDescriptorSets[imageId].pImageInfo      = descriptorImageInfos.data() + imageId;
-    }
-
-    vkUpdateDescriptorSets(a_device, a_imagesNumber, writeDescriptorSets.data(), 0, NULL);
-  }
-
-  void CreateDescriptorSetsForImagesWithSM(VkDevice a_device, const VkDescriptorSetLayout a_dsLayout, VkDescriptorPool a_dsPool,
-                                           VkSampler* a_samplers, VkImageView *a_views, VkSampler a_shadowSampler, VkImageView a_view,
-                                           int a_imagesNumber, VkDescriptorSet* a_pDS)
-  {
-    assert(a_pDS != nullptr);
-
-    assert(a_samplers != nullptr);
-    assert(a_views != nullptr);
-    assert(a_imagesNumber != 0);
-
-    // With the pool allocated, we can now allocate the descriptor set.
-    //
-    std::vector<VkDescriptorSetLayout> layouts(a_imagesNumber);
-    for (int i = 0; i<layouts.size(); i++)
-      layouts[i] = a_dsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {};
-    descriptorSetAllocateInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool     = a_dsPool;   // pool to allocate from.
-    descriptorSetAllocateInfo.descriptorSetCount = a_imagesNumber; // allocate a descriptor set for buffer and image
-    descriptorSetAllocateInfo.pSetLayouts        = layouts.data();
-
-    // allocate descriptor set.
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(a_device, &descriptorSetAllocateInfo, a_pDS));
-
-    // Next, we need to connect our actual texture with the descriptor.
-    // We use vkUpdateDescriptorSets() to update the descriptor set.
-    //
-    std::vector<VkDescriptorImageInfo> descriptorImageInfos(a_imagesNumber);
-    std::vector<VkWriteDescriptorSet>  writeDescriptorSets(a_imagesNumber);
-
-    VkDescriptorImageInfo shadowImageInfo;
-    shadowImageInfo             = VkDescriptorImageInfo{};
-    shadowImageInfo.sampler     = a_shadowSampler;
-    shadowImageInfo.imageView   = a_view;
-    shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    for (int imageId = 0; imageId < a_imagesNumber; imageId++)
-    {
-      descriptorImageInfos[imageId]             = VkDescriptorImageInfo{};
-      descriptorImageInfos[imageId].sampler     = a_samplers[imageId];
-      descriptorImageInfos[imageId].imageView   = a_views[imageId];
-      descriptorImageInfos[imageId].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-      VkDescriptorImageInfo descrImageInfos[2] = { descriptorImageInfos[imageId] , shadowImageInfo };
-
-      writeDescriptorSets[imageId]                 = VkWriteDescriptorSet{};
-      writeDescriptorSets[imageId].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      writeDescriptorSets[imageId].dstSet          = a_pDS[imageId];
-      writeDescriptorSets[imageId].dstBinding      = 0;
-      writeDescriptorSets[imageId].descriptorCount = 2;
-      writeDescriptorSets[imageId].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; // image.
-      writeDescriptorSets[imageId].pImageInfo      = descrImageInfos;
-
-      vkUpdateDescriptorSets(a_device, 1, writeDescriptorSets.data() + imageId, 0, NULL);
-    }
-
-  }
-
 
   static void CreateRenderPass(VkDevice a_device, VkFormat a_swapChainImageFormat, 
                                VkRenderPass* a_pRenderPass)
