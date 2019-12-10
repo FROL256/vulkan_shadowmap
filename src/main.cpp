@@ -26,9 +26,10 @@
 #include "vk_quad.h"
 #include "vk_program.h"
 #include "vk_graphics_pipeline.h"
-#include "Bitmap.h"
 
+#include "Bitmap.h"
 #include "Camera.h"
+#include "qmc_sobol_niederreiter.h"
 
 const int WIDTH  = 1024;
 const int HEIGHT = 1024;
@@ -1022,6 +1023,9 @@ private:
 
 int main() 
 {
+  //auto testSample = MakeSortedByPixel_QRND_2D_DISK(WIDTH, HEIGHT, 4);
+
+
   HelloTriangleApplication app; // Everybody does in this way due to Vulkan reauire a lot of objects to manage.
                                 // Putting all of them in global variables assumed as bad design, but IMHO for such sample there is no difference ...
   try 

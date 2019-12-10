@@ -33,7 +33,8 @@ add_executable(vulkan_minimal_graphics src/main.cpp
                                        src/vk_quad.h src/vk_quad.cpp
                                        src/vk_program.h src/vk_program.cpp 
                                        src/vk_graphics_pipeline.h src/vk_graphics_pipeline.cpp
-                                       src/Bitmap.h src/Bitmap.cpp)
+                                       src/Bitmap.h src/Bitmap.cpp
+                                       src/qmc_sobol_niederreiter.h src/qmc_sobol_niederreiter.cpp)
 
 set_target_properties(vulkan_minimal_graphics PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
