@@ -641,10 +641,32 @@ namespace LiteMath
     return m;
   }
 
+  static inline float4x4 transpose(const float4x4 a_mat)
+  {
+    float4x4 res;
+    res.row[0].x = a_mat.row[0].x;
+    res.row[0].y = a_mat.row[1].x;
+    res.row[0].z = a_mat.row[2].x;
+    res.row[0].w = a_mat.row[3].x;
+    res.row[1].x = a_mat.row[0].y;
+    res.row[1].y = a_mat.row[1].y;
+    res.row[1].z = a_mat.row[2].y;
+    res.row[1].w = a_mat.row[3].y;
+    res.row[2].x = a_mat.row[0].z;
+    res.row[2].y = a_mat.row[1].z;
+    res.row[2].z = a_mat.row[2].z;
+    res.row[2].w = a_mat.row[3].z;
+    res.row[3].x = a_mat.row[0].w;
+    res.row[3].y = a_mat.row[1].w;
+    res.row[3].z = a_mat.row[2].w;
+    res.row[3].w = a_mat.row[3].w;
+    return res;
+  }
+
   // Look At matrix creation
   // return the inverse view matrix
   //
-  static inline float4x4 lookAtTransposed(float3 eye, float3 center, float3 up)
+  static inline float4x4 lookAt(float3 eye, float3 center, float3 up)
   {
     float3 x, y, z; // basis; will make a rotation matrix
 
@@ -666,66 +688,49 @@ namespace LiteMath
     y = normalize(y);
 
     float4x4 M;
-    M.row[0].x = x.x; M.row[1].x = x.y; M.row[2].x = x.z; M.row[3].x = -x.x * eye.x - x.y * eye.y - x.z*eye.z;
-    M.row[0].y = y.x; M.row[1].y = y.y; M.row[2].y = y.z; M.row[3].y = -y.x * eye.x - y.y * eye.y - y.z*eye.z;
-    M.row[0].z = z.x; M.row[1].z = z.y; M.row[2].z = z.z; M.row[3].z = -z.x * eye.x - z.y * eye.y - z.z*eye.z;
-    M.row[0].w = 0.0; M.row[1].w = 0.0; M.row[2].w = 0.0; M.row[3].w = 1.0;
+    M.M(0,0) = x.x; M.M(1,0) = x.y; M.M(2,0) = x.z; M.M(3,0) = -x.x * eye.x - x.y * eye.y - x.z*eye.z;
+    M.M(0,1) = y.x; M.M(1,1) = y.y; M.M(2,1) = y.z; M.M(3,1) = -y.x * eye.x - y.y * eye.y - y.z*eye.z;
+    M.M(0,2) = z.x; M.M(1,2) = z.y; M.M(2,2) = z.z; M.M(3,2) = -z.x * eye.x - z.y * eye.y - z.z*eye.z;
+    M.M(0,3) = 0.0; M.M(1,3) = 0.0; M.M(2,3) = 0.0; M.M(3,3) = 1.0;
     return M;
   }
 
-  static inline void _my_frustumf3(float *matrix, float left, float right, float bottom, float top, float znear, float zfar)
-  {
-    float temp, temp2, temp3, temp4;
-    temp = 2.0f * znear;
-    temp2 = right - left;
-    temp3 = top - bottom;
-    temp4 = zfar - znear;
-    matrix[0] = temp / temp2;
-    matrix[1] = 0.0;
-    matrix[2] = 0.0;
-    matrix[3] = 0.0;
-    matrix[4] = 0.0;
-    matrix[5] = temp / temp3;
-    matrix[6] = 0.0;
-    matrix[7] = 0.0;
-    matrix[8] = (right + left) / temp2;
-    matrix[9] = (top + bottom) / temp3;
-    matrix[10] = (-zfar - znear) / temp4;
-    matrix[11] = -1.0;
-    matrix[12] = 0.0;
-    matrix[13] = 0.0;
-    matrix[14] = (-temp * zfar) / temp4;
-    matrix[15] = 0.0;
-  }
-  
-  static inline float4x4 projectionMatrixTransposed(float fovy, float aspect, float zNear, float zFar)
+  static inline float4x4 projectionMatrix(float fovy, float aspect, float zNear, float zFar)
   {
     float4x4 res;
     const float ymax = zNear * tanf(fovy * 3.14159265358979323846f / 360.0f);
     const float xmax = ymax * aspect;
-    _my_frustumf3(res.L(), -xmax, xmax, -ymax, ymax, zNear, zFar);
-    return res;
-  }
+ 
+    const float left   = -xmax;
+    const float right  = +xmax;
+    const float bottom = -ymax;
+    const float top    = +ymax;
 
-  static inline float4x4 transpose(const float4x4 a_mat)
-  {
-    float4x4 res;
-    res.row[0].x = a_mat.row[0].x;
-    res.row[0].y = a_mat.row[1].x;
-    res.row[0].z = a_mat.row[2].x;
-    res.row[0].w = a_mat.row[3].x;
-    res.row[1].x = a_mat.row[0].y;
-    res.row[1].y = a_mat.row[1].y;
-    res.row[1].z = a_mat.row[2].y;
-    res.row[1].w = a_mat.row[3].y;
-    res.row[2].x = a_mat.row[0].z;
-    res.row[2].y = a_mat.row[1].z;
-    res.row[2].z = a_mat.row[2].z;
-    res.row[2].w = a_mat.row[3].z;
-    res.row[3].x = a_mat.row[0].w;
-    res.row[3].y = a_mat.row[1].w;
-    res.row[3].z = a_mat.row[2].w;
-    res.row[3].w = a_mat.row[3].w;
+    const float temp = 2.0f * zNear;
+    const float temp2 = right - left;
+    const float temp3 = top - bottom;
+    const float temp4 = zFar - zNear;
+ 
+    res.M(0,0) = temp / temp2;
+    res.M(0,1) = 0.0;
+    res.M(0,2) = 0.0;
+    res.M(0,3) = 0.0;
+    
+    res.M(1,0) = 0.0;
+    res.M(1,1) = temp / temp3;
+    res.M(1,2) = 0.0;
+    res.M(1,3) = 0.0;
+
+    res.M(2, 0) = (right + left) / temp2;
+    res.M(2, 1) = (top + bottom) / temp3;
+    res.M(2, 2) = (-zFar - zNear) / temp4;
+    res.M(2, 3) = -1.0;
+
+    res.M(3, 0) = 0.0;
+    res.M(3, 1) = 0.0;
+    res.M(3, 2) = (-temp * zFar) / temp4;
+    res.M(3, 3) = 0.0;
+     
     return res;
   }
 

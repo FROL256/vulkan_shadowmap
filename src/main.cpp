@@ -1064,12 +1064,12 @@ private:
 
       LiteMath::float4x4 mProj;
       if(m_light.usePerspectiveM)
-        mProj = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f));
+        mProj = LiteMath::projectionMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
       else
         mProj = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
         
       auto mProjFix       = m_light.usePerspectiveM ? LiteMath::float4x4() : LiteMath::vulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
-      auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up));
+      auto mLookAt        = LiteMath::lookAt(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up);
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float4x4(), true);
@@ -1100,8 +1100,8 @@ private:
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
       auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
-      auto mProj          = LiteMath::transpose(LiteMath::projectionMatrixTransposed(m_cam.fov, aspect, 0.1f, 1000.0f));
-      auto mLookAt        = LiteMath::transpose(LiteMath::lookAtTransposed(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up));
+      auto mProj          = LiteMath::projectionMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
+      auto mLookAt        = LiteMath::lookAt(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightMatrix, false);
