@@ -1,5 +1,12 @@
 #include "vk_graphics_pipeline.h"
 
+#include <cstring>
+
+vk_utils::GraphicsPipelineCreateInfo::GraphicsPipelineCreateInfo() 
+{ 
+  memset(this, 0, sizeof(GraphicsPipelineCreateInfo)); ///<! ASSUME THIS IS PLAIN OLD DATA!!!!
+} 
+
 void vk_utils::GraphicsPipelineCreateInfo::Shaders_VSFS(VkDevice a_device, const char* vs_path, const char* ps_path)
 {
   auto vertShaderCode = vk_utils::ReadFile(vs_path);
