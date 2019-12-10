@@ -761,7 +761,7 @@ namespace LiteMath
 
   // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
   //
-  static inline float4x4 vulkanProjectionMatrixFix()
+  static inline float4x4 OpenglToVulkanProjectionMatrixFix()
   {
     float4x4 res;
     res.identity();

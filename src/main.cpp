@@ -25,6 +25,7 @@
 #include "vk_texture.h"
 #include "vk_quad.h"
 #include "vk_program.h"
+#include "vk_graphics_pipeline.h"
 #include "Bitmap.h"
 
 #include "Camera.h"
@@ -32,11 +33,8 @@
 const int WIDTH  = 1024;
 const int HEIGHT = 1024;
 
-const int MAX_FRAMES_IN_FLIGHT = 1;
-
-const std::vector<const char*> deviceExtensions = {
-  VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
+const int MAX_FRAMES_IN_FLIGHT = 1;                                                    // swapchain issues
+const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME }; // swapchain issues
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -44,6 +42,10 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
+/**
+\brief user input with keyboard and mouse
+
+*/
 struct g_input_t
 {
   bool firstMouse   = true;
@@ -167,36 +169,44 @@ public:
   }
 
 private:
-  GLFWwindow * window;
-
-  VkInstance instance;
+  
+  // Vulkan basics
+  //
+  VkInstance               instance;
   std::vector<const char*> enabledLayers;
-
   VkDebugUtilsMessengerEXT debugMessenger;
-  VkSurfaceKHR surface;
 
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-  VkDevice device;
-
+  VkDevice         device         = VK_NULL_HANDLE;
   VkQueue graphicsQueue, presentQueue, transferQueue;
 
+  // window and swapchain specific
+  //
+  GLFWwindow*                     window;
   vk_utils::ScreenBufferResources screen;
-  VkImage        depthImage       = nullptr;
-  VkDeviceMemory depthImageMemory = nullptr;
-  VkImageView    depthImageView   = nullptr;
+  VkSurfaceKHR                    surface;
 
-  VkRenderPass     renderPass             = nullptr;
-  VkPipelineLayout pipelineLayout         = nullptr;
-  VkPipeline       graphicsPipeline       = nullptr;
-  VkPipeline       graphicsPipelineShadow = nullptr;
+  // screen depthbuffer
+  //
+  VkImage        depthImage       = VK_NULL_HANDLE;
+  VkDeviceMemory depthImageMemory = VK_NULL_HANDLE; 
+  VkImageView    depthImageView   = VK_NULL_HANDLE;
 
-  VkCommandPool                commandPool;
-  std::vector<VkCommandBuffer> commandBuffers;
+  // main renderpass and pipelines
+  //
+  VkRenderPass     renderPass             = VK_NULL_HANDLE;
+  VkPipelineLayout pipelineLayout         = VK_NULL_HANDLE; ///!< pipeline layout that is used for both main and shadowmap pipelines
+  VkPipeline       graphicsPipeline       = VK_NULL_HANDLE; ///!< main pipeline 
+  VkPipeline       graphicsPipelineShadow = VK_NULL_HANDLE; ///!< simplified pipiline for shadowmap
 
-  VkDeviceMemory        m_memAllMeshes   = nullptr; //
-  VkDeviceMemory        m_memAllTextures = nullptr;
-  VkDeviceMemory        m_memShadowMap   = nullptr;
+  // allocated memory for useful objects
+  //
+  VkDeviceMemory        m_memAllMeshes   = VK_NULL_HANDLE; //
+  VkDeviceMemory        m_memAllTextures = VK_NULL_HANDLE;
+  VkDeviceMemory        m_memShadowMap   = VK_NULL_HANDLE;
 
+  // sync objects and command buffers per "frame-in-flight"
+  //
   struct SyncObj
   {
     std::vector<VkSemaphore> imageAvailableSemaphores;
@@ -204,9 +214,16 @@ private:
     std::vector<VkFence>     inFlightFences;
   } m_sync;
 
-  size_t currentFrame = 0;
+  std::vector<VkCommandBuffer> commandBuffers;
+  VkCommandPool                commandPool;
+
+  size_t currentFrame = 0; ///<! curren frame that is displayed now! Don't render to that frame!
   Camera m_cam;
 
+  /**
+  \brief basic parameters that you need for sdhadowmappinh usually
+
+  */
   struct ShadowMapCam
   {
     ShadowMapCam() 
@@ -221,15 +238,20 @@ private:
     }
 
     float  radius;           ///!< ignored when usePerspectiveM == true 
-    float  lightTargetDist;
-    Camera cam;
-    bool   usePerspectiveM;
+    float  lightTargetDist;  ///!< identify depth range
+    Camera cam;              ///!< user control for light to later get light worldViewProj matrix
+    bool   usePerspectiveM;  ///!< use perspective matrix if true and ortographics otherwise
   
   } m_light;
   
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+  /**
+  \brief Simple copy engine implementation. Our mesh and texture helpers require use to implement copy by himself.
+         So, we make such implementation by calling simple helpers from vk_copy::SimpleCopyHelper
+
+  */
   struct CopyEngine : public vk_geom::ICopyEngine, 
                       public vk_texture::ICopyEngine
   {
@@ -252,8 +274,7 @@ private:
   std::shared_ptr<vk_geom::IMesh>   m_pBunnyMesh;
   std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
-  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, TEXTURES_NUM = 3, // 
-        SHADOW_MAP = 3, DESCRIPTORS_NUM = TEXTURES_NUM+1};               //
+  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, TEXTURES_NUM = 3 };  
 
   std::shared_ptr<vk_texture::SimpleTexture2D>     m_pTex[TEXTURES_NUM];
   std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
@@ -263,9 +284,10 @@ private:
   // A single descriptor represents a single resource, and several descriptors are organized
   // into descriptor sets, which are basically just collections of descriptors.
   // 
-  VkDescriptorSet       descriptorSet[DESCRIPTORS_NUM] = {}; // for our textures
+  VkDescriptorSet       descriptorSetForQuad; // for our textures
   VkDescriptorSet       descriptorSetWithSM[TEXTURES_NUM] = {};
-  VkDescriptorSetLayout descriptorSetLayout = nullptr, descriptorSetLayoutSM = nullptr;
+  VkDescriptorSetLayout descriptorSetLayoutQuad = nullptr;
+  VkDescriptorSetLayout descriptorSetLayoutSM   = nullptr;
 
   std::shared_ptr<vk_utils::ProgramBindings> m_pBindings = nullptr;
 
@@ -376,33 +398,23 @@ private:
     if (!presentSupport)
       throw std::runtime_error("vkGetPhysicalDeviceSurfaceSupportKHR: no present support for the target device and graphics queue");
 
+    // logical device, queues and command pool
+    //
     device = vk_utils::CreateLogicalDevice(queueFID, physicalDevice, enabledLayers, deviceExtensions);
     vkGetDeviceQueue(device, queueFID,     0, &graphicsQueue);
     vkGetDeviceQueue(device, queueFID,     0, &presentQueue);
     vkGetDeviceQueue(device, queueCopyFID, 0, &transferQueue);
-    
-    // ==> commadnPool
-    {
-      VkCommandPoolCreateInfo poolInfo = {};
-      poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-      poolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-      poolInfo.queueFamilyIndex = vk_utils::GetQueueFamilyIndex(physicalDevice, VK_QUEUE_GRAPHICS_BIT);
 
-      if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
-        throw std::runtime_error("[CreateCommandPoolAndBuffers]: failed to create command pool!");
-    }
-
-    vk_utils::CreateCwapChain(physicalDevice, device, surface, WIDTH, HEIGHT,
-                              &screen);
-
-    vk_utils::CreateScreenImageViews(device, &screen);
-
+    // helper copy engine (for copying from CPU to GPU)
+    //
     m_pCopyHelper = std::make_unique<CopyEngine>(physicalDevice, device, transferQueue, 64*1024*1024);
 
+    // helper object that simplify descriptor sets creation
+    //
     VkDescriptorType dtypes[2] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER };
     m_pBindings = std::make_shared<vk_utils::ProgramBindings>(device, dtypes, 2, 64);
 
-    int a = 2;
+    CreateSyncObjects(device, &m_sync);
   }
 
   void CreateResources()
@@ -410,21 +422,32 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    // swap chain and screen images
+    //
+    vk_utils::CreateCwapChain(physicalDevice, device, surface, WIDTH, HEIGHT,
+                              &screen);
+
+    vk_utils::CreateScreenImageViews(device, &screen);
+
     vk_utils::CreateDepthTexture(device, physicalDevice, WIDTH, HEIGHT, 
                                  &depthImageMemory, &depthImage, &depthImageView);
 
     CreateRenderPass(device, screen.swapChainImageFormat, 
                      &renderPass);
   
-    CreateScreenFrameBuffers(device, renderPass, depthImageView, &screen);
+    CreateScreenFrameBuffers(device, renderPass, depthImageView, 
+                             &screen);
+
+    // create basic command buffers
+    //
+    commandPool    = vk_utils::CreateCommandPool(device, physicalDevice, VK_QUEUE_GRAPHICS_BIT, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    commandBuffers = vk_utils::CreateCommandBuffers(device, commandPool, screen.swapChainFramebuffers.size());
 
     m_pFSQuad = std::make_shared<vk_utils::FSQuad>();
     m_pFSQuad->Create(device, "shaders/quad_vert.spv", "shaders/quad_frag.spv", 
                       vk_utils::RenderTargetInfo2D{ VkExtent2D{ WIDTH, HEIGHT }, screen.swapChainImageFormat, 
                                                     VK_ATTACHMENT_LOAD_OP_LOAD, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR });
-  
-    CreateSyncObjects(device, &m_sync);
-
+ 
     // create textures
     //
     int  w1, h1, w2, h2, w3, h3;
@@ -501,7 +524,7 @@ private:
     //
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
     m_pBindings->BindImage(0, m_pShadowMap->View(), m_pShadowMap->Sampler());
-    m_pBindings->BindEnd(&descriptorSet[SHADOW_MAP], &descriptorSetLayout);
+    m_pBindings->BindEnd(&descriptorSetForQuad, &descriptorSetLayoutQuad);
     
 
     m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
@@ -569,22 +592,20 @@ private:
     assert(m_pShadowMap   != nullptr);
     assert(m_pTerrainMesh != nullptr);
 
-    CreateGraphicsPipelines(device, screen.swapChainExtent, renderPass, m_pShadowMap, descriptorSetLayoutSM, m_pTerrainMesh->VertexInputLayout(),
-                            &pipelineLayout, &graphicsPipeline, &graphicsPipelineShadow);
+    vk_utils::GraphicsPipelineCreateInfo grmaker;
+    
+    pipelineLayout = grmaker.Layout_Simple3D_VSFS(device, WIDTH, HEIGHT, descriptorSetLayoutSM, 4 * 16 * sizeof(float));
 
-    // create command buffers for rendering
-    {
-      commandBuffers.resize(screen.swapChainFramebuffers.size());
+    grmaker.Shaders_VSFS(device, "shaders/cmesh_t3v4x2.spv", "shaders/direct_light.spv");
+    graphicsPipeline = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
 
-      VkCommandBufferAllocateInfo allocInfo = {};
-      allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-      allocInfo.commandPool        = commandPool;
-      allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-      allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
+    grmaker.Shaders_VS(device, "shaders/cmesh_t3v4x2.spv");
+    grmaker.viewport.width  = +(float)m_pShadowMap->Width();
+    grmaker.viewport.height = +(float)m_pShadowMap->Height();
+    grmaker.scissor.extent  = VkExtent2D{ uint32_t(m_pShadowMap->Width()), uint32_t(m_pShadowMap->Height()) };
 
-      if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
-        throw std::runtime_error("[CreateCommandPoolAndBuffers]: failed to allocate command buffers!");
-    }
+    graphicsPipelineShadow  = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), m_pShadowMap->Renderpass());
+  
 
   }
 
@@ -762,220 +783,14 @@ private:
       throw std::runtime_error("[CreateRenderPass]: failed to create render pass!");
   }
 
-  static void CreateGraphicsPipelines(VkDevice a_device, VkExtent2D a_screenExtent, VkRenderPass a_renderPass, std::shared_ptr<vk_texture::RenderableTexture2D> a_shadowTex,
-                                      VkDescriptorSetLayout a_dslayout, VkPipelineVertexInputStateCreateInfo a_vertLayout,
-                                      VkPipelineLayout* a_pLayout, VkPipeline* a_pPipeline, VkPipeline* a_pPipelineShadow)
-  {
-    const char* vs_path = "shaders/cmesh_t3v4x2.spv";
-    const char* ps_path = "shaders/direct_light.spv";
-
-    auto vertShaderCode = vk_utils::ReadFile(vs_path);
-    auto fragShaderCode = vk_utils::ReadFile(ps_path);
-
-    VkShaderModule vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
-    VkShaderModule fragShaderModule = vk_utils::CreateShaderModule(a_device, fragShaderCode);
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
-    vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName  = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
-    fragShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName  = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-    
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
-    inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    VkViewport viewport = {};
-    viewport.x          = 0.0f;
-    viewport.y          = 0.0f;
-    viewport.width      = (float)a_screenExtent.width;
-    viewport.height     = (float)a_screenExtent.height;
-    viewport.minDepth   = 0.0f;
-    viewport.maxDepth   = 1.0f;
-
-    VkRect2D scissor = {};
-    scissor.offset = { 0, 0 };
-    scissor.extent = a_screenExtent;
-
-    VkPipelineViewportStateCreateInfo viewportState = {};
-    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.pViewports    = &viewport;
-    viewportState.scissorCount  = 1;
-    viewportState.pScissors     = &scissor;
-
-    VkPipelineRasterizationStateCreateInfo rasterizer = {};
-    rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.depthClampEnable        = VK_FALSE;
-    rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_LINE
-    rasterizer.lineWidth               = 1.0f;
-    rasterizer.cullMode                = VK_CULL_MODE_NONE; // VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace               = VK_FRONT_FACE_CLOCKWISE;
-    rasterizer.depthBiasEnable         = VK_FALSE;
-
-    VkPipelineMultisampleStateCreateInfo multisampling = {};
-    multisampling.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable  = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable    = VK_FALSE;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending = {};
-    colorBlending.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable     = VK_FALSE;
-    colorBlending.logicOp           = VK_LOGIC_OP_COPY;
-    colorBlending.attachmentCount   = 1;
-    colorBlending.pAttachments      = &colorBlendAttachment;
-    colorBlending.blendConstants[0] = 0.0f;
-    colorBlending.blendConstants[1] = 0.0f;
-    colorBlending.blendConstants[2] = 0.0f;
-    colorBlending.blendConstants[3] = 0.0f;
-
-    VkPushConstantRange pcRange = {};   
-    pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-    pcRange.offset     = 0;
-    pcRange.size       = 16*4*sizeof(float);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-    pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
-    pipelineLayoutInfo.pSetLayouts            = &a_dslayout; //&descriptorSetLayout;
-    pipelineLayoutInfo.setLayoutCount         = 1;
-
-    if (vkCreatePipelineLayout(a_device, &pipelineLayoutInfo, nullptr, a_pLayout) != VK_SUCCESS)
-      throw std::runtime_error("[CreateGraphicsPipeline]: failed to create pipeline layout!");
-
-    VkPipelineDepthStencilStateCreateInfo depthStencilTest = {};
-    depthStencilTest.sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilTest.depthTestEnable       = true;  
-    depthStencilTest.depthWriteEnable      = true;
-    depthStencilTest.depthCompareOp        = VK_COMPARE_OP_LESS;
-    depthStencilTest.depthBoundsTestEnable = false;
-    depthStencilTest.stencilTestEnable     = false;
-    depthStencilTest.depthBoundsTestEnable = VK_FALSE;
-    depthStencilTest.minDepthBounds        = 0.0f; // Optional
-    depthStencilTest.maxDepthBounds        = 1.0f; // Optional
-
-    auto vertexInputInfo = a_vertLayout;
-
-    VkGraphicsPipelineCreateInfo pipelineInfo = {};
-    pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.flags               = VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT; // we need this for creating derivative pipeline for shadowmap
-    pipelineInfo.stageCount          = 2;
-    pipelineInfo.pStages             = shaderStages;
-    pipelineInfo.pVertexInputState   = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState      = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState   = &multisampling;
-    pipelineInfo.pColorBlendState    = &colorBlending;
-    pipelineInfo.layout              = (*a_pLayout);
-    pipelineInfo.renderPass          = a_renderPass;
-    pipelineInfo.subpass             = 0;
-    pipelineInfo.basePipelineHandle  = VK_NULL_HANDLE;
-    pipelineInfo.pDepthStencilState  = &depthStencilTest;
-
-    if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, a_pPipeline) != VK_SUCCESS)
-      throw std::runtime_error("[CreateGraphicsPipeline]: failed to create graphics pipeline!");
-
-    vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
-    vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
-
-    // create similar pipeline for shadow map. But now we do not attach pixel shader.
-    //
-    CreateDerivedPipeline(a_device, pipelineInfo, (*a_pPipeline), 
-                          a_shadowTex->Renderpass(), uint32_t(a_shadowTex->Width()), uint32_t(a_shadowTex->Height()), vs_path, nullptr,
-                          a_pPipelineShadow);
-  }
-
-  static void CreateDerivedPipeline(VkDevice a_device, VkGraphicsPipelineCreateInfo a_pipelineInfo, VkPipeline a_basePipeline, 
-                                    VkRenderPass a_renderPass, uint32_t a_width, uint32_t a_height, const char* a_vsPath, const char* a_fsPath,
-                                    VkPipeline* a_pDerivedPipeline)
-  {
-    std::vector<uint32_t> vertShaderCode, fragShaderCode;
-    VkShaderModule vertShaderModule = nullptr, fragShaderModule = nullptr;
-
-    assert(a_vsPath != nullptr);
-    {
-      vertShaderCode   = vk_utils::ReadFile(a_vsPath);
-      vertShaderModule = vk_utils::CreateShaderModule(a_device, vertShaderCode);
-    }
-
-    if (a_fsPath != nullptr) // when render to shadowmap fragment shader could be nullptr
-    {
-      fragShaderCode   = vk_utils::ReadFile(a_fsPath);
-      fragShaderModule = vk_utils::CreateShaderModule(a_device, fragShaderCode);
-    }
-
-    // Modify pipeline info to reflect derivation
-    //
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
-    vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName  = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
-    fragShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName  = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-    VkViewport viewport = {};
-    viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = +(float)a_width;
-    viewport.height   = +(float)a_height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor = {};
-    scissor.offset   = { 0, 0 };
-    scissor.extent   = VkExtent2D{ a_width, a_height };
-
-    VkPipelineViewportStateCreateInfo viewportState = {};
-    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.pViewports    = &viewport;
-    viewportState.scissorCount  = 1;
-    viewportState.pScissors     = &scissor;
-
-    a_pipelineInfo.flags              = VK_PIPELINE_CREATE_DERIVATIVE_BIT;
-    a_pipelineInfo.basePipelineHandle = a_basePipeline;
-    a_pipelineInfo.basePipelineIndex  = -1;
-    a_pipelineInfo.stageCount         = (a_fsPath == nullptr) ? 1 : 2;
-    a_pipelineInfo.pStages            = shaderStages;
-    a_pipelineInfo.renderPass         = a_renderPass;
-    a_pipelineInfo.pViewportState     = &viewportState;
-
-    if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &a_pipelineInfo, nullptr, a_pDerivedPipeline) != VK_SUCCESS)
-      throw std::runtime_error("[CreateDerivedPipeline]: failed to create graphics pipeline!");
-
-    vkDestroyShaderModule(a_device, vertShaderModule, nullptr);
-    if(fragShaderModule != nullptr)
-      vkDestroyShaderModule(a_device, fragShaderModule, nullptr);
-  }
-
-  
-  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float4x4 a_lightMatrix,
-                    bool a_drawToShadowMap)
+  /**
+  \brief this function draw (i.e. put drawing commands in the command buffer) scene once 
+  \param a_cmdBuff         - output command buffer in wich commands will be written to
+  \param a_mWorldViewProj  - input  world view projection matrix; assume Vulkan coordinate system fpr Proj.
+  \param a_lightMatrix     - input  light matrix (transform world space to tangent space); ignored if a_drawToShadowMap == false;
+  \param a_drawToShadowMap - input flag that signals we drawing geometry only in the shadow map
+  */
+  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float4x4 a_lightMatrix, bool a_drawToShadowMap)
   {
     LiteMath::float3 a_lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
     auto             a_layout   = pipelineLayout;
@@ -998,7 +813,7 @@ private:
       matrices[2] = LiteMath::transpose(mrot);
     }
 
-    if (!a_drawToShadowMap)
+    if (!a_drawToShadowMap) // in this particular sample we don't want to draw ground in the shadow map
     {
       vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + TERRAIN_TEX, 0, NULL);
       vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 4 * 16, matrices);
@@ -1014,10 +829,8 @@ private:
       matrices[1]     = LiteMath::transpose(mWVPL);
       matrices[2]     = LiteMath::float4x4();
     }
-
-    if (!a_drawToShadowMap)
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + STONE_TEX, 0, NULL);
-    
+   
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + STONE_TEX, 0, NULL);
     vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 4 * 16, matrices);
     m_pTeapotMesh->DrawCmd(a_cmdBuff);
 
@@ -1032,18 +845,25 @@ private:
       matrices[2]     = LiteMath::float4x4();
     }
 
-    if (!a_drawToShadowMap)
-      vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + METAL_TEX, 0, NULL);
-    
+    vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + METAL_TEX, 0, NULL);
     vkCmdPushConstants(a_cmdBuff, a_layout, (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT), 0, sizeof(float) * 4 * 16, matrices);
     m_pBunnyMesh->DrawCmd(a_cmdBuff);
   }
   
+  /**
+  \brief Main draw function
+  \param a_cmdBuff - output command buffer in wich commands will be written to 
+  \param a_fbo     - output framebuffer where we are going to render
+  \param a_targetImageView - auxilary image view that is related to a_fbo; needed for drawing debug quad only
 
-  void WriteCommandBuffer(VkRenderPass a_renderPass, VkFramebuffer a_fbo, VkImageView a_targetImageView,  VkExtent2D a_frameBufferExtent, 
-                          VkPipeline a_graphicsPipeline, VkPipelineLayout a_layout,
-                          VkCommandBuffer& a_cmdBuff)
+  */
+  void DrawFrameCmd(VkCommandBuffer& a_cmdBuff, VkFramebuffer a_fbo, VkImageView a_targetImageView)
   {
+    VkExtent2D a_frameBufferExtent = this->screen.swapChainExtent;
+    VkPipeline a_graphicsPipeline  = this->graphicsPipeline;
+    VkPipelineLayout a_layout      = this->pipelineLayout;
+    VkRenderPass     a_renderPass  = this->renderPass;
+
     vkResetCommandBuffer(a_cmdBuff, 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
@@ -1068,7 +888,7 @@ private:
       else
         mProj = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
         
-      auto mProjFix       = m_light.usePerspectiveM ? LiteMath::float4x4() : LiteMath::vulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
+      auto mProjFix       = m_light.usePerspectiveM ? LiteMath::float4x4() : LiteMath::OpenglToVulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
       auto mLookAt        = LiteMath::lookAt(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up);
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
 
@@ -1099,7 +919,7 @@ private:
       vkCmdBindPipeline   (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
-      auto mProjFix       = LiteMath::vulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
+      auto mProjFix       = LiteMath::OpenglToVulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
       auto mProj          = LiteMath::projectionMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
       auto mLookAt        = LiteMath::lookAt(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
       auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
@@ -1113,7 +933,7 @@ private:
     {
       float scaleAndOffset[4] = {0.5f, 0.5f, -0.5f, +0.5f};
       m_pFSQuad->SetRenderTarget(a_targetImageView);
-      m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSet[SHADOW_MAP], scaleAndOffset);
+      m_pFSQuad->DrawCmd(a_cmdBuff, descriptorSetForQuad, scaleAndOffset);
     }
 
     if (vkEndCommandBuffer(a_cmdBuff) != VK_SUCCESS)
@@ -1144,6 +964,12 @@ private:
     }
   }
 
+  /**
+  \brief This function is a general example of async frame rendering and displaying in Vulkan.
+         It rotates several objects for parallel rendering abd displaying image.
+      
+         Further objects are rotated: (commandBuffers, screen.swapChainFramebuffers, screen.swapChainImageViews, m_sync.inFlightFences)
+  */
   void DrawFrame() 
   {
     vkWaitForFences(device, 1, &m_sync.inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
@@ -1154,10 +980,7 @@ private:
     
     // update next used command buffer
     //
-    {
-      WriteCommandBuffer(renderPass, screen.swapChainFramebuffers[imageIndex], screen.swapChainImageViews[imageIndex], screen.swapChainExtent, graphicsPipeline, pipelineLayout, 
-                         commandBuffers[imageIndex]);
-    }
+    DrawFrameCmd(commandBuffers[imageIndex], screen.swapChainFramebuffers[imageIndex], screen.swapChainImageViews[imageIndex]);
 
     VkSemaphore      waitSemaphores[] = { m_sync.imageAvailableSemaphores[currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -1169,7 +992,7 @@ private:
     submitInfo.pWaitDstStageMask  = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers    = &commandBuffers[imageIndex];
+    submitInfo.pCommandBuffers    = &commandBuffers[imageIndex]; // note that we will draw from this command buffer now
 
     VkSemaphore signalSemaphores[]  = { m_sync.renderFinishedSemaphores[currentFrame] };
     submitInfo.signalSemaphoreCount = 1;
@@ -1178,6 +1001,8 @@ private:
     if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, m_sync.inFlightFences[currentFrame]) != VK_SUCCESS)
       throw std::runtime_error("[DrawFrame]: failed to submit draw command buffer!");
 
+    // as well as submitting drawing, we should submit present
+    //
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
@@ -1198,8 +1023,8 @@ private:
 
 int main() 
 {
-  HelloTriangleApplication app;
-
+  HelloTriangleApplication app; // Everybody does in this way due to Vulkan reauire a lot of objects to manage.
+                                // Putting all of them in global variables assumed as bad design, but IMHO for such sample there is no difference ...
   try 
   {
     app.run();

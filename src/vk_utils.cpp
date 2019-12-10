@@ -383,6 +383,36 @@ VkShaderModule vk_utils::CreateShaderModule(VkDevice a_device, const std::vector
   return shaderModule;
 }
 
+VkCommandPool vk_utils::CreateCommandPool(VkDevice a_device, VkPhysicalDevice a_physDevice, VkQueueFlagBits a_queueFlags, VkCommandPoolCreateFlagBits a_poolFlags)
+{
+  VkCommandPoolCreateInfo poolInfo = {};
+  poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  poolInfo.flags            = a_poolFlags;
+  poolInfo.queueFamilyIndex = vk_utils::GetQueueFamilyIndex(a_physDevice, a_queueFlags);
+
+  VkCommandPool commandPool;
+  if (vkCreateCommandPool(a_device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
+    throw std::runtime_error("[CreateCommandPool]: failed to create command pool!");
+
+  return commandPool;
+}
+
+std::vector<VkCommandBuffer> vk_utils::CreateCommandBuffers(VkDevice a_device, VkCommandPool a_pool, uint32_t a_buffNum)
+{
+  std::vector<VkCommandBuffer> commandBuffers(a_buffNum);
+
+  VkCommandBufferAllocateInfo allocInfo = {};
+  allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocInfo.commandPool        = a_pool;
+  allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocInfo.commandBufferCount = a_buffNum;
+
+  if (vkAllocateCommandBuffers(a_device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
+    throw std::runtime_error("[CreateCommandPoolAndBuffers]: failed to allocate command buffers!");
+
+  return commandBuffers;
+}
+
 void vk_utils::ExecuteCommandBufferNow(VkCommandBuffer a_cmdBuff, VkQueue a_queue, VkDevice a_device)
 {
   // Now we shall finally submit the recorded command bufferStaging to a queue.

@@ -67,8 +67,20 @@ namespace vk_utils
   std::vector<uint32_t> ReadFile(const char* filename);
   VkShaderModule CreateShaderModule(VkDevice a_device, const std::vector<uint32_t>& code);
 
+  /**
+  \brief Immediately execute command buffer and wait.
+  */
   void ExecuteCommandBufferNow(VkCommandBuffer a_cmdBuff, VkQueue a_queue, VkDevice a_device);
 
+  /**
+  \brief TBD
+  */
+  VkCommandPool                CreateCommandPool(VkDevice a_device, VkPhysicalDevice a_physDevice, VkQueueFlagBits a_queueFlags, VkCommandPoolCreateFlagBits a_poolFlags);
+  
+  /**
+  \brief TBD
+  */
+  std::vector<VkCommandBuffer> CreateCommandBuffers(VkDevice a_device, VkCommandPool a_pool, uint32_t a_buffNum);
 
   /**
   \brief This struction contain enough info for enabling render-to-texture in Vulkan and creating all additional Vulkan objects
