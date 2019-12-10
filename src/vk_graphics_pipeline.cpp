@@ -130,10 +130,10 @@ VkPipeline vk_utils::GraphicsPipelineCreateInfo::Pipeline(VkDevice a_device, VkP
   auto vertexInputInfo = a_vertexLayout;
 
   VkGraphicsPipelineCreateInfo pipelineInfo = {};
-  pipelineInfo.sType                               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipelineInfo.flags                               = 0; 
-  pipelineInfo.stageCount                          = m_stagesNum;
-  pipelineInfo.pStages                             = shaderStageInfo;
+  pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  pipelineInfo.flags               = 0; 
+  pipelineInfo.stageCount          = m_stagesNum;
+  pipelineInfo.pStages             = shaderStageInfo;
   pipelineInfo.pVertexInputState   = &vertexInputInfo;
   pipelineInfo.pInputAssemblyState = &inputAssembly;
   pipelineInfo.pViewportState      = &viewportState;

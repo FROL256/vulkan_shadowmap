@@ -526,7 +526,6 @@ private:
     m_pBindings->BindImage(0, m_pShadowMap->View(), m_pShadowMap->Sampler());
     m_pBindings->BindEnd(&descriptorSetForQuad, &descriptorSetLayoutQuad);
     
-
     m_pTex[TERRAIN_TEX]->Update(data1.data(), w1, h1, sizeof(int), m_pCopyHelper.get()); // --> put m_pTex[i] in transfer_dst layout
     m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
     m_pTex[METAL_TEX]->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
@@ -534,7 +533,7 @@ private:
     // generate all mips
     //
     {
-      VkCommandBuffer cmdBuff = m_pCopyHelper->CmdBuffer(); 
+      VkCommandBuffer cmdBuff = m_pCopyHelper->CmdBuffer(); // you can any other command buffer with transfer capability here ... 
 
       vkResetCommandBuffer(cmdBuff, 0);
       VkCommandBufferBeginInfo beginInfo = {};
