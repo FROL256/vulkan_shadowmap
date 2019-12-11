@@ -201,6 +201,7 @@ double getQuasirandomValue63(INT64 i, int dim)
 
 #include <cstdint>
 #include <algorithm>
+#include <iostream>
 
 /**
 \brief  transform  sample in rect [-1,1]x[-1,1] to disc centered at (0,0) with radius == 1. 
@@ -247,6 +248,47 @@ static inline void MapSamplesToDisc(float xy[2])
   xy[1] = r*cos_phi;
 }
 
+// generate samples
+//
+struct Sample
+{
+  float data[4];
+  uint32_t x; uint32_t y;
+
+  bool operator<(const Sample& rhs) const
+  {
+    const uint64_t key1 = uint64_t(x)     | (uint64_t(y) << 32);
+    const uint64_t key2 = uint64_t(rhs.x) | (uint64_t(rhs.y) << 32);
+    return (key1 < key2);
+  }
+};
+
+bool VerifySamples(const std::vector<Sample>& a_samples, int a_width, int a_height, int a_randsPerPixel)
+{
+  for (int y = 0; y < a_height; y++)
+  {
+    for (int x = 0; x < a_width; x++)
+    {
+      bool equals = true;
+      Sample sam0 = a_samples[y*a_width*a_randsPerPixel + x*a_randsPerPixel];
+      for (int k = 0; k < a_randsPerPixel; k++)
+      {
+        Sample sami = a_samples[y*a_width*a_randsPerPixel + x * a_randsPerPixel + k];
+        if (sam0.x != sami.x || sam0.y != sami.y ||
+            sam0.x !=      x || sam0.y != y)
+        {
+          equals = false;
+          break;
+        }
+      }
+
+      if (!equals)
+        return false;
+    }
+  }
+
+  return true;
+}
 
 std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int a_randsPerPixel)
 {
@@ -254,21 +296,6 @@ std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int
   //
   unsigned int table[QRNG_DIMENSIONS][QRNG_RESOLUTION];
   initQuasirandomGenerator(table);
-
-  // generate samples
-  //
-  struct Sample
-  {
-    float data[4];
-    uint32_t x; uint32_t y;
-
-    bool operator<(const Sample& rhs) const
-    {
-      const uint64_t key1 = uint64_t(x)     | (uint64_t(y) << 32);
-      const uint64_t key2 = uint64_t(rhs.x) | (uint64_t(rhs.y) << 32);
-      return (key1 < key2);
-    }
-  };
   
   std::vector<Sample> samples(a_width*a_height*a_randsPerPixel);
 
@@ -287,9 +314,8 @@ std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int
 
   std::sort(samples.begin(), samples.end()); // #TODO: sort samples in parallel
 
-  // #TODO: add verification function ... 
-  // please verify that for each pair of (x,y) you have exactly 4 sample at loc samples[y*w*a_randsPerPixel + x*a_randsPerPixel]
-  //
+  //if (!VerifySamples(samples, a_width, a_height, a_randsPerPixel))
+    //std::cout << "[MakeSortedByPixel_QRND_2D_DISK]: verification has FAILED!" << std::endl;
 
   // pack resulting data in single vector and return it
   //

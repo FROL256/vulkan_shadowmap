@@ -275,10 +275,14 @@ private:
   std::shared_ptr<vk_geom::IMesh>   m_pBunnyMesh;
   std::shared_ptr<vk_utils::FSQuad> m_pFSQuad;
 
-  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, TEXTURES_NUM = 3 };  
+  enum {TERRAIN_TEX = 0, STONE_TEX = 1, METAL_TEX = 2, AUX_TEX_ROT = 3, TEXTURES_NUM = 4 };  
 
   std::shared_ptr<vk_texture::SimpleTexture2D>     m_pTex[TEXTURES_NUM];
   std::shared_ptr<vk_texture::RenderableTexture2D> m_pShadowMap;
+
+  static constexpr int TEX_ROT_WIDTH  = 256;
+  static constexpr int TEX_ROT_HEIGHT = 256;
+  static constexpr int TEX_SAMPLES_PP = 8;
 
   // Descriptors represent resources in shaders. They allow us to use things like
   // uniform buffers, storage buffers and images in GLSL.
@@ -470,10 +474,12 @@ private:
     auto memReqTex1 = m_pTex[TERRAIN_TEX]->CreateImage(device, w1, h1, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex2 = m_pTex[STONE_TEX]->CreateImage(device, w2, h2, VK_FORMAT_R8G8B8A8_UNORM);
     auto memReqTex3 = m_pTex[METAL_TEX]->CreateImage(device, w3, h3, VK_FORMAT_R8G8B8A8_UNORM);
-    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D16_UNORM); 
+    auto memReqTex5 = m_pTex[AUX_TEX_ROT]->CreateImage(device, TEX_ROT_WIDTH, TEX_ROT_HEIGHT, VK_FORMAT_R32G32B32A32_UINT);
+    auto memReqTex4 = m_pShadowMap->CreateImage(device, 2048, 2048, VK_FORMAT_D16_UNORM);
 
     assert(memReqTex1.memoryTypeBits == memReqTex2.memoryTypeBits);
     assert(memReqTex1.memoryTypeBits == memReqTex3.memoryTypeBits);
+    assert(memReqTex1.memoryTypeBits == memReqTex5.memoryTypeBits);
     //assert(memReqTex1.memoryTypeBits == memReqTex4.memoryTypeBits); // well, usually not, please make separate allocation for shadow map :)
     
     // memory for all read-only textures
@@ -481,7 +487,7 @@ private:
       VkMemoryAllocateInfo allocateInfo = {};
       allocateInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
       allocateInfo.pNext           = nullptr;
-      allocateInfo.allocationSize  = memReqTex1.size + memReqTex2.size + memReqTex3.size;
+      allocateInfo.allocationSize  = memReqTex1.size + memReqTex2.size + memReqTex3.size + memReqTex5.size;
       allocateInfo.memoryTypeIndex = vk_utils::FindMemoryType(memReqTex1.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, physicalDevice);
 
       VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memAllTextures));
@@ -498,10 +504,11 @@ private:
       VK_CHECK_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &m_memShadowMap));
     }
 
-    m_pTex[0]->BindMemory(m_memAllTextures, 0);
-    m_pTex[1]->BindMemory(m_memAllTextures, memReqTex1.size);
-    m_pTex[2]->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size);
-    m_pShadowMap->BindMemory(m_memShadowMap, 0);
+    m_pTex[TERRAIN_TEX]->BindMemory(m_memAllTextures, 0);
+    m_pTex[STONE_TEX]->BindMemory  (m_memAllTextures, memReqTex1.size);
+    m_pTex[METAL_TEX]->BindMemory  (m_memAllTextures, memReqTex1.size + memReqTex2.size);
+    m_pTex[AUX_TEX_ROT]->BindMemory(m_memAllTextures, memReqTex1.size + memReqTex2.size + memReqTex3.size);
+    m_pShadowMap->BindMemory       (m_memShadowMap, 0);
 
 
     // DS for drawing objects
@@ -509,16 +516,19 @@ private:
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
     m_pBindings->BindImage(0, m_pTex[TERRAIN_TEX]->View(), m_pTex[TERRAIN_TEX]->Sampler());
     m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindImage(2, m_pTex[AUX_TEX_ROT]->View(), m_pTex[AUX_TEX_ROT]->Sampler());
     m_pBindings->BindEnd(&descriptorSetWithSM[TERRAIN_TEX], &descriptorSetLayoutSM);
 
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
     m_pBindings->BindImage(0, m_pTex[STONE_TEX]->View(), m_pTex[STONE_TEX]->Sampler());
     m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindImage(2, m_pTex[AUX_TEX_ROT]->View(), m_pTex[AUX_TEX_ROT]->Sampler());
     m_pBindings->BindEnd(&descriptorSetWithSM[STONE_TEX]);
 
     m_pBindings->BindBegin(VK_SHADER_STAGE_FRAGMENT_BIT);
     m_pBindings->BindImage(0, m_pTex[METAL_TEX]->View(), m_pTex[METAL_TEX]->Sampler());
     m_pBindings->BindImage(1, m_pShadowMap->View(), m_pShadowMap->Sampler());
+    m_pBindings->BindImage(2, m_pTex[AUX_TEX_ROT]->View(), m_pTex[AUX_TEX_ROT]->Sampler());
     m_pBindings->BindEnd(&descriptorSetWithSM[METAL_TEX]);
 
     // DS for srawing quad
@@ -531,6 +541,39 @@ private:
     m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
     m_pTex[METAL_TEX]->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
     
+                                                                                         // update auxilary texture for samples direction
+                                                                                         //
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    auto samplesF = MakeSortedByPixel_QRND_2D_DISK(TEX_ROT_WIDTH, TEX_ROT_HEIGHT, TEX_SAMPLES_PP);
+
+    // put each of 8*2 floats to single pixel of VK_FORMAT_R32G32B32A32_UINT
+    //
+    std::vector<uint32_t> samplesCompressed(TEX_ROT_WIDTH*TEX_ROT_HEIGHT * 4);
+    {
+      #pragma omp parallel for
+      for (int y = 0; y < TEX_ROT_HEIGHT; y++)
+      {
+        for (int x = 0; x < TEX_ROT_WIDTH; x++)
+        {
+          float     f[TEX_SAMPLES_PP * 2];
+          uint32_t  ui[TEX_SAMPLES_PP * 2];
+          for (int k = 0; k < TEX_SAMPLES_PP * 2; k++)
+          {
+            f[k]  = samplesF[(y*TEX_ROT_WIDTH + x) * TEX_SAMPLES_PP * 2 + k];
+            ui[k] = uint32_t( (f[k] + 1.0f)*0.5f*255.0f );
+          }
+
+          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 0] = (ui[3]  << 24) | (ui[2]  << 16) | (ui[1]  << 8)  | ui[0];
+          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 1] = (ui[7]  << 24) | (ui[6]  << 16) | (ui[5]  << 8)  | ui[4];
+          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 2] = (ui[11] << 24) | (ui[10] << 16) | (ui[9]  << 8)  | ui[8];
+          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 3] = (ui[15] << 24) | (ui[14] << 16) | (ui[13] << 8)  | ui[12];
+        }
+      }
+    }
+
+    m_pTex[AUX_TEX_ROT]->Update(samplesCompressed.data(), TEX_ROT_WIDTH, TEX_ROT_HEIGHT, sizeof(uint32_t)*4, m_pCopyHelper.get());
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     // generate all mips
     //
     {
@@ -543,13 +586,14 @@ private:
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      for (int i = 0; i<TEXTURES_NUM; i++)
+      for (int i = 0; i<TEXTURES_NUM-1; i++) // don't generate mips for auxilarry texture
         m_pTex[i]->GenerateMipsCmd(cmdBuff);                                            // --> put m_pTex[i] in shader_read layout
      
       vkEndCommandBuffer(cmdBuff);
 
       vk_utils::ExecuteCommandBufferNow(cmdBuff, transferQueue, device);
     }
+
 
     // create meshes
     //
@@ -800,8 +844,9 @@ private:
     LiteMath::float4x4 matrices[4];
 
     {
-      matrices[3].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
-      matrices[3].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);
+      matrices[3].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);                       // put wCamPos
+      matrices[3].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);   // put lightDir
+      matrices[3].row[2].x = 2.0f / m_pShadowMap->Width();                             // put shadowMapSizeInv
     }
 
     {
@@ -1023,8 +1068,6 @@ private:
 
 int main() 
 {
-  //auto testSample = MakeSortedByPixel_QRND_2D_DISK(WIDTH, HEIGHT, 4);
-
 
   HelloTriangleApplication app; // Everybody does in this way due to Vulkan reauire a lot of objects to manage.
                                 // Putting all of them in global variables assumed as bad design, but IMHO for such sample there is no difference ...
