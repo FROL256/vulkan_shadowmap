@@ -30,6 +30,8 @@ VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device,
   m_format = a_format;
 
   m_mipLevels = int(floor(log2(std::max(m_width, m_height))) + 1);
+  if (a_format == VK_FORMAT_R32G32B32A32_UINT)
+    m_mipLevels = 1;
 
   VkImageCreateInfo imgCreateInfo = {};
   imgCreateInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -51,17 +53,19 @@ VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device,
   VkMemoryRequirements memoryRequirements;
   vkGetImageMemoryRequirements(a_device, m_image, &memoryRequirements);
 
+  const bool isFiltered = (a_format != VK_FORMAT_R32G32B32A32_UINT); // #TODO: add other formats here
+
   VkSamplerCreateInfo samplerInfo = {};
   {
     samplerInfo.sType            = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.pNext            = nullptr;
     samplerInfo.flags            = 0;
-    samplerInfo.magFilter        = VK_FILTER_LINEAR;
-    samplerInfo.minFilter        = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode       = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.addressModeU     = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV     = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW     = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.magFilter        = isFiltered ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    samplerInfo.minFilter        = isFiltered ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    samplerInfo.mipmapMode       = isFiltered ? VK_SAMPLER_MIPMAP_MODE_LINEAR  : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.addressModeU     = isFiltered ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV     = isFiltered ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW     = isFiltered ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.mipLodBias       = 0.0f;
     samplerInfo.compareOp        = VK_COMPARE_OP_NEVER;
     samplerInfo.minLod           = 0;

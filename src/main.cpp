@@ -559,8 +559,8 @@ private:
           uint32_t  ui[TEX_SAMPLES_PP * 2];
           for (int k = 0; k < TEX_SAMPLES_PP * 2; k++)
           {
-            f[k]  = samplesF[(y*TEX_ROT_WIDTH + x) * TEX_SAMPLES_PP * 2 + k];
-            ui[k] = uint32_t( (f[k] + 1.0f)*0.5f*255.0f );
+            f[k]  = (samplesF[(y*TEX_ROT_WIDTH + x) * TEX_SAMPLES_PP * 2 + k] + 1.0f)*0.5f*255.0f;
+            ui[k] = uint32_t(fmin(f[k], 255.0f));
           }
 
           samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 0] = (ui[3]  << 24) | (ui[2]  << 16) | (ui[1]  << 8)  | ui[0];
@@ -586,7 +586,7 @@ private:
       if (vkBeginCommandBuffer(cmdBuff, &beginInfo) != VK_SUCCESS) 
          throw std::runtime_error("[FFF]: failed to begin command buffer!");
       
-      for (int i = 0; i<TEXTURES_NUM-1; i++) // don't generate mips for auxilarry texture
+      for (int i = 0; i<TEXTURES_NUM; i++) // don't generate mips for auxilarry texture
         m_pTex[i]->GenerateMipsCmd(cmdBuff);                                            // --> put m_pTex[i] in shader_read layout
      
       vkEndCommandBuffer(cmdBuff);
@@ -828,7 +828,7 @@ private:
   }
 
   /**
-  \brief this function draw (i.e. put drawing commands in the command buffer) scene once 
+  \brief this function draw (i.e. `drawing commands in the command buffer) scene once 
   \param a_cmdBuff         - output command buffer in wich commands will be written to
   \param a_mWorldViewProj  - input  world view projection matrix; assume Vulkan coordinate system fpr Proj.
   \param a_lightMatrix     - input  light matrix (transform world space to tangent space); ignored if a_drawToShadowMap == false;
@@ -844,9 +844,11 @@ private:
     LiteMath::float4x4 matrices[4];
 
     {
-      matrices[3].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);                       // put wCamPos
-      matrices[3].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);   // put lightDir
-      matrices[3].row[2].x = 2.0f / m_pShadowMap->Width();                             // put shadowMapSizeInv
+      matrices[3].row[0]   = LiteMath::to_float4(m_cam.pos, 0.0f);                     // put wCamPos
+      matrices[3].row[1]   = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist); // put lightDir
+      matrices[3].row[2].x = 1.0f / WIDTH;
+      matrices[3].row[2].y = 1.0f / HEIGHT;
+      matrices[3].row[2].z = 2.0f / m_pShadowMap->Width();                             // put (pcfFilterSize*shadowMapSizeInv)
     }
 
     {

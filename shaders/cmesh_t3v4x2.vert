@@ -13,10 +13,9 @@ layout(push_constant) uniform params_t
   vec4 wCamPos;
   vec4 lightDir;
   
+  vec2  winSizeInv;
   float shadowMapSizeInv;
-  float pcfFilterSize;
   float dummy1;
-  float dummy2;
 
 } params;
 
