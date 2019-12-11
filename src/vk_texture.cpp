@@ -22,6 +22,18 @@ vk_texture::SimpleTexture2D::~SimpleTexture2D()
   m_currentStage  = VK_PIPELINE_STAGE_TRANSFER_BIT;
 }
 
+static size_t Padding(size_t a_size, size_t a_aligment)
+{
+  if (a_size % a_aligment == 0)
+    return a_size;
+  else
+  {
+    size_t sizeCut = a_size - (a_size % a_aligment);
+    return sizeCut + a_aligment;
+  }
+}
+
+
 VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device, const int a_width, const int a_height, VkFormat a_format)
 {
   m_device = a_device;
@@ -77,8 +89,8 @@ VkMemoryRequirements vk_texture::SimpleTexture2D::CreateImage(VkDevice a_device,
   }
   VK_CHECK_RESULT(vkCreateSampler(a_device, &samplerInfo, nullptr, &this->m_sampler));
 
-  m_createImageInfo = imgCreateInfo;
-
+  m_createImageInfo       = imgCreateInfo;
+  memoryRequirements.size = Padding(memoryRequirements.size, memoryRequirements.alignment*4);
   return memoryRequirements;
 }
 
