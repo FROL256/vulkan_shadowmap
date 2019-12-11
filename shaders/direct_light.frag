@@ -25,7 +25,7 @@ layout(push_constant) uniform params_t
   vec4 wCamPos;
   vec4 lightDir;
 
-  vec2  winSizeInv;
+  vec2  texRotSize;
   float shadowMapSizeInv;
   float dummy1;
 
@@ -37,10 +37,8 @@ void main()
   const vec3 posLightSpaceNDC  = posLightClipSpace.xyz/posLightClipSpace.w;    // for orto matrix, we don't need perspective division, you can remove it if you want; this is general case;
   const vec2 shadowTexCoord    = posLightSpaceNDC.xy*0.5f + vec2(0.5f, 0.5f);  // just shift coords from [-1,1] to [0,1]               
   
-  ivec2 temp        = ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y));
-  vec2  isTexCoord  = mod(temp, ivec2(256, 256));
-  vec2  fsTexCoord  = isTexCoord*(1.0f/256.0f);
-  const uvec4 data  = textureLod(rotMap, fsTexCoord, 0);
+  vec2  isTexCoord  = mod(gl_FragCoord.xy, params.texRotSize);
+  const uvec4 data  = texelFetch(rotMap, ivec2(isTexCoord.x,isTexCoord.y) , 0);
   const float nMult = (1.0f/255.0f);
 
   const float s0x = float((data.x & 0x000000FF)     )*nMult*2.0f - 1.0f;
@@ -72,8 +70,7 @@ void main()
   const vec2 off5 = vec2(s5x,s5y)*(params.shadowMapSizeInv);
   const vec2 off6 = vec2(s6x,s6y)*(params.shadowMapSizeInv);
   const vec2 off7 = vec2(s7x,s7y)*(params.shadowMapSizeInv);
-  
-  
+   
   /*
   const vec2 off0 = vec2(-0.9f,-0.8f)*(params.shadowMapSizeInv);
   const vec2 off1 = vec2(+0.8f,-0.9f)*(params.shadowMapSizeInv);

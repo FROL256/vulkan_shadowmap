@@ -846,8 +846,8 @@ private:
     {
       matrices[3].row[0]   = LiteMath::to_float4(m_cam.pos, 0.0f);                     // put wCamPos
       matrices[3].row[1]   = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist); // put lightDir
-      matrices[3].row[2].x = 1.0f / WIDTH;
-      matrices[3].row[2].y = 1.0f / HEIGHT;
+      matrices[3].row[2].x = TEX_ROT_WIDTH;
+      matrices[3].row[2].y = TEX_ROT_HEIGHT;
       matrices[3].row[2].z = 2.0f / m_pShadowMap->Width();                             // put (pcfFilterSize*shadowMapSizeInv)
     }
 
