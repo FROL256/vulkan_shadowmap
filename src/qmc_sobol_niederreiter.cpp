@@ -325,7 +325,7 @@ std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int
   {
     res[i*2+0] = samples[i].data[2]*2.0f - 1.0f; 
     res[i*2+1] = samples[i].data[3]*2.0f - 1.0f; 
-    //MapSamplesToDisc(samples[i].data+2);       // #TODO: check if this works
+    MapSamplesToDisc(samples[i].data+2);       // #TODO: check if this works
   }
 
   return res;

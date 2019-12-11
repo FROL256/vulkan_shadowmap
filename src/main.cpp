@@ -43,6 +43,8 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
+enum SHADER_SETUP{SIMPLE_SHADOWMAP = 1, SIMPLE_PCF = 2, RAND_PCF = 3, SOBOL_PCF = 4};
+
 /**
 \brief user input with keyboard and mouse
 
@@ -55,9 +57,11 @@ struct g_input_t
   bool drawFSQuad   = false;
   bool controlLight = false;
 
-  float lastX,lastY, scrollY;
+  float lastX, lastY, scrollY;
   float camMoveSpeed     = 1.0f;
   float mouseSensitivity = 0.1f;
+
+  SHADER_SETUP displayedAlgorithm = SOBOL_PCF;
 
 } g_input;
 
@@ -93,6 +97,22 @@ void OnKeyboardPressed(GLFWwindow* window, int key, int scancode, int action, in
   case GLFW_KEY_0:
     g_input.drawFSQuad = false;
     break;  
+
+  case GLFW_KEY_3:
+    g_input.displayedAlgorithm = SIMPLE_SHADOWMAP;
+    break;
+
+  case GLFW_KEY_4:
+    g_input.displayedAlgorithm = SIMPLE_PCF;
+    break;
+
+  case GLFW_KEY_5:
+    g_input.displayedAlgorithm = RAND_PCF;
+    break;
+
+  case GLFW_KEY_6:
+    g_input.displayedAlgorithm = SOBOL_PCF;
+    break;
 
   case GLFW_KEY_L:
     g_input.controlLight = true;
@@ -197,8 +217,11 @@ private:
   //
   VkRenderPass     renderPass             = VK_NULL_HANDLE;
   VkPipelineLayout pipelineLayout         = VK_NULL_HANDLE; ///!< pipeline layout that is used for both main and shadowmap pipelines
-  VkPipeline       graphicsPipeline       = VK_NULL_HANDLE; ///!< main pipeline 
+  VkPipeline       grPipelineSimple       = VK_NULL_HANDLE; ///!< simple shadowmapping
+  VkPipeline       grPipelinePCF          = VK_NULL_HANDLE; ///!< shadowmapping with simple PCF
+  VkPipeline       grPipelinePCFRand      = VK_NULL_HANDLE; ///!< shadowmapping with randomised PCF
   VkPipeline       graphicsPipelineShadow = VK_NULL_HANDLE; ///!< simplified pipiline for shadowmap
+
 
   // allocated memory for useful objects
   //
@@ -453,6 +476,9 @@ private:
                       vk_utils::RenderTargetInfo2D{ VkExtent2D{ WIDTH, HEIGHT }, screen.swapChainImageFormat, 
                                                     VK_ATTACHMENT_LOAD_OP_LOAD, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR });
  
+
+    std::cout << "[CreateResources]: loading textures ... " << std::endl;
+
     // create textures
     //
     int  w1, h1, w2, h2, w3, h3;
@@ -541,10 +567,13 @@ private:
     m_pTex[STONE_TEX]->Update(data2.data(), w2, h2, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
     m_pTex[METAL_TEX]->Update(data3.data(), w3, h3, sizeof(int), m_pCopyHelper.get());   // --> put m_pTex[i] in transfer_dst layout
     
-                                                                                         // update auxilary texture for samples direction
-                                                                                         //
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    std::cout << "[CreateResources]: generating random numbers ... " << std::endl;
+
     auto samplesF = MakeSortedByPixel_QRND_2D_DISK(TEX_ROT_WIDTH, TEX_ROT_HEIGHT, TEX_SAMPLES_PP);
+
+    //for (size_t i = 0; i < samplesF.size(); i++)
+      //samplesF[i] = rnd_simple(-1.0f, 1.0f);
 
     // put each of 8*2 floats to single pixel of VK_FORMAT_R32G32B32A32_UINT
     //
@@ -636,12 +665,20 @@ private:
     assert(m_pShadowMap   != nullptr);
     assert(m_pTerrainMesh != nullptr);
 
+    std::cout << "[CreateResources]: creating shaders/pipelines ... " << std::endl;
+
     vk_utils::GraphicsPipelineCreateInfo grmaker;
     
     pipelineLayout = grmaker.Layout_Simple3D_VSFS(device, WIDTH, HEIGHT, descriptorSetLayoutSM, 4 * 16 * sizeof(float));
 
-    grmaker.Shaders_VSFS(device, "shaders/cmesh_t3v4x2.spv", "shaders/direct_light.spv");
-    graphicsPipeline = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
+    grmaker.Shaders_VSFS(device, "shaders/cmesh_t3v4x2.spv", "shaders/direct_light_simple.spv");
+    grPipelineSimple = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
+
+    grmaker.Shaders_VSFS(device, "shaders/cmesh_t3v4x2.spv", "shaders/direct_light_pcf.spv");
+    grPipelinePCF = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
+
+    grmaker.Shaders_VSFS(device, "shaders/cmesh_t3v4x2.spv", "shaders/direct_light_pcf_rand.spv");
+    grPipelinePCFRand = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
 
     grmaker.Shaders_VS(device, "shaders/cmesh_t3v4x2.spv");
     grmaker.viewport.width  = +(float)m_pShadowMap->Width();
@@ -649,8 +686,7 @@ private:
     grmaker.scissor.extent  = VkExtent2D{ uint32_t(m_pShadowMap->Width()), uint32_t(m_pShadowMap->Height()) };
 
     graphicsPipelineShadow  = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), m_pShadowMap->Renderpass());
-  
-
+ 
   }
 
 
@@ -744,9 +780,13 @@ private:
       vkDestroyFramebuffer(device, framebuffer, nullptr);
     }
 
-    vkDestroyPipeline(device, graphicsPipeline, nullptr);
+    vkDestroyPipeline(device, grPipelineSimple, nullptr);
     if(graphicsPipelineShadow != nullptr)
       vkDestroyPipeline(device, graphicsPipelineShadow, nullptr);
+    if(grPipelinePCF != VK_NULL_HANDLE)
+      vkDestroyPipeline(device, grPipelinePCF, nullptr);
+    if (grPipelinePCFRand != VK_NULL_HANDLE)
+      vkDestroyPipeline(device, grPipelinePCFRand, nullptr);
 
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass    (device, renderPass, nullptr);
@@ -907,7 +947,15 @@ private:
   void DrawFrameCmd(VkCommandBuffer& a_cmdBuff, VkFramebuffer a_fbo, VkImageView a_targetImageView)
   {
     VkExtent2D a_frameBufferExtent = this->screen.swapChainExtent;
-    VkPipeline a_graphicsPipeline  = this->graphicsPipeline;
+    
+    VkPipeline a_graphicsPipeline = VK_NULL_HANDLE; 
+    if (g_input.displayedAlgorithm == SIMPLE_SHADOWMAP)
+      a_graphicsPipeline = this->grPipelineSimple;
+    else if (g_input.displayedAlgorithm == SIMPLE_PCF)
+      a_graphicsPipeline = this->grPipelinePCF;
+    else
+      a_graphicsPipeline = this->grPipelinePCFRand;
+
     VkPipelineLayout a_layout      = this->pipelineLayout;
     VkRenderPass     a_renderPass  = this->renderPass;
 

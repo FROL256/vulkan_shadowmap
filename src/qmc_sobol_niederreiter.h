@@ -24,5 +24,11 @@ void initQuasirandomGenerator(unsigned int table[QRNG_DIMENSIONS][QRNG_RESOLUTIO
 
 std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int a_randsPerPixel);
 
+inline float rnd_simple(float s, float e) // not used actually! just for test
+{
+  float t = (float)(rand()) / (float)RAND_MAX;
+  return s + t * (e - s);
+}
+
 #endif
 
