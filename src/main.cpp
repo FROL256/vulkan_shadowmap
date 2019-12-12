@@ -888,7 +888,7 @@ private:
       matrices[3].row[1]   = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist); // put lightDir
       matrices[3].row[2].x = TEX_ROT_WIDTH;
       matrices[3].row[2].y = TEX_ROT_HEIGHT;
-      matrices[3].row[2].z = 2.0f / m_pShadowMap->Width();                             // put (pcfFilterSize*shadowMapSizeInv)
+      matrices[3].row[2].z = 1.5f / m_pShadowMap->Width();                             // put (pcfFilterSize*shadowMapSizeInv)
     }
 
     {
