@@ -184,6 +184,14 @@ public:
     InitVulkan();
     CreateResources();
 
+    std::cout << std::endl;
+    std::cout << "[Controls]: (3,4,5) for different shadow map methods" << std::endl;
+    std::cout << "[Controls]: (9,0)   for enable/disable shadow map visualizing (red quad)" << std::endl;
+    std::cout << "[Controls]: (L,C)   for control Light or Camera " << std::endl;
+    std::cout << "[Controls]: (Ctrl,Shift) for different camera speed  " << std::endl;
+    std::cout << "[Controls]: (left mouse button) for the GLFW focus/mouse catch  " << std::endl;
+    std::cout << std::endl;
+
     MainLoop();
 
     Cleanup();
@@ -570,35 +578,11 @@ private:
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     std::cout << "[CreateResources]: generating random numbers ... " << std::endl;
 
-    auto samplesF = MakeSortedByPixel_QRND_2D_DISK(TEX_ROT_WIDTH, TEX_ROT_HEIGHT, TEX_SAMPLES_PP);
-
+    auto samplesF          = MakeSortedByPixel_QRND_2D_DISK(TEX_ROT_WIDTH, TEX_ROT_HEIGHT, TEX_SAMPLES_PP);
     //for (size_t i = 0; i < samplesF.size(); i++)
       //samplesF[i] = rnd_simple(-1.0f, 1.0f);
 
-    // put each of 8*2 floats to single pixel of VK_FORMAT_R32G32B32A32_UINT
-    //
-    std::vector<uint32_t> samplesCompressed(TEX_ROT_WIDTH*TEX_ROT_HEIGHT * 4);
-    {
-      #pragma omp parallel for
-      for (int y = 0; y < TEX_ROT_HEIGHT; y++)
-      {
-        for (int x = 0; x < TEX_ROT_WIDTH; x++)
-        {
-          float     f[TEX_SAMPLES_PP * 2];
-          uint32_t  ui[TEX_SAMPLES_PP * 2];
-          for (int k = 0; k < TEX_SAMPLES_PP * 2; k++)
-          {
-            f[k]  = (samplesF[(y*TEX_ROT_WIDTH + x) * TEX_SAMPLES_PP * 2 + k] + 1.0f)*0.5f*255.0f;
-            ui[k] = uint32_t(fmin(f[k], 255.0f));
-          }
-
-          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 0] = (ui[3]  << 24) | (ui[2]  << 16) | (ui[1]  << 8)  | ui[0];
-          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 1] = (ui[7]  << 24) | (ui[6]  << 16) | (ui[5]  << 8)  | ui[4];
-          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 2] = (ui[11] << 24) | (ui[10] << 16) | (ui[9]  << 8)  | ui[8];
-          samplesCompressed[(y*TEX_ROT_WIDTH + x) * 4 + 3] = (ui[15] << 24) | (ui[14] << 16) | (ui[13] << 8)  | ui[12];
-        }
-      }
-    }
+    auto samplesCompressed = Compress8SamplesToUint32x4(samplesF, TEX_ROT_WIDTH, TEX_ROT_HEIGHT);
 
     m_pTex[AUX_TEX_ROT]->Update(samplesCompressed.data(), TEX_ROT_WIDTH, TEX_ROT_HEIGHT, sizeof(uint32_t)*4, m_pCopyHelper.get());
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -622,7 +606,6 @@ private:
 
       vk_utils::ExecuteCommandBufferNow(cmdBuff, transferQueue, device);
     }
-
 
     // create meshes
     //

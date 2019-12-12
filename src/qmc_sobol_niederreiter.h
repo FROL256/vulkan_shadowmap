@@ -22,7 +22,8 @@ static inline float rndQmcSobolN(unsigned int pos, int dim, const unsigned int* 
 
 void initQuasirandomGenerator(unsigned int table[QRNG_DIMENSIONS][QRNG_RESOLUTION]);
 
-std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int a_randsPerPixel);
+std::vector<float>    MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int a_randsPerPixel);
+std::vector<uint32_t> Compress8SamplesToUint32x4(const std::vector<float>& samplesF, int a_tex_width, int a_tex_height);
 
 inline float rnd_simple(float s, float e) // not used actually! just for test
 {

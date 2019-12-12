@@ -330,3 +330,34 @@ std::vector<float> MakeSortedByPixel_QRND_2D_DISK(int a_width, int a_height, int
 
   return res;
 }
+
+
+std::vector<uint32_t> Compress8SamplesToUint32x4(const std::vector<float>& samplesF, int a_tex_width, int a_tex_height)
+{
+  std::vector<uint32_t> samplesCompressed(a_tex_width*a_tex_height*4);
+  
+  constexpr int TEX_SAMPLES_PP = 8;
+
+  #pragma omp parallel for
+  for (int y = 0; y < a_tex_height; y++)
+  {
+    for (int x = 0; x < a_tex_width; x++)
+    {
+      float     f[TEX_SAMPLES_PP * 2];
+      uint32_t  ui[TEX_SAMPLES_PP * 2];
+
+      for (int k = 0; k < TEX_SAMPLES_PP * 2; k++)
+      {
+        f[k]  = (samplesF[(y*a_tex_width + x) * TEX_SAMPLES_PP * 2 + k] + 1.0f)*0.5f*255.0f;
+        ui[k] = uint32_t(fmin(f[k], 255.0f));
+      }
+
+      samplesCompressed[(y*a_tex_width + x) * 4 + 0] = (ui[3] << 24)  | (ui[2] << 16)  | (ui[1] << 8)  | ui[0];
+      samplesCompressed[(y*a_tex_width + x) * 4 + 1] = (ui[7] << 24)  | (ui[6] << 16)  | (ui[5] << 8)  | ui[4];
+      samplesCompressed[(y*a_tex_width + x) * 4 + 2] = (ui[11] << 24) | (ui[10] << 16) | (ui[9] << 8)  | ui[8];
+      samplesCompressed[(y*a_tex_width + x) * 4 + 3] = (ui[15] << 24) | (ui[14] << 16) | (ui[13] << 8) | ui[12];
+    }
+  }
+  
+  return samplesCompressed;
+}
