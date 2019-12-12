@@ -2,6 +2,7 @@
 #define QMC_SOBOL_H
 
 #include <vector>
+#include <cstdint>
 
 
 #define QRNG_DIMENSIONS 4
