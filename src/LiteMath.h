@@ -509,16 +509,18 @@ namespace cmath
     y = normalize(y);
 
     float4x4 M;
-    M(0, 0) = x.x; M(1, 0) = x.y; M(2, 0) = x.z; M(3, 0) = -x.x * eye.x - x.y * eye.y - x.z*eye.z;
-    M(0, 1) = y.x; M(1, 1) = y.y; M(2, 1) = y.z; M(3, 1) = -y.x * eye.x - y.y * eye.y - y.z*eye.z;
-    M(0, 2) = z.x; M(1, 2) = z.y; M(2, 2) = z.z; M(3, 2) = -z.x * eye.x - z.y * eye.y - z.z*eye.z;
-    M(0, 3) = 0.0; M(1, 3) = 0.0; M(2, 3) = 0.0; M(3, 3) = 1.0;
-    return transpose(M);
+    M.set_col(0, float4{ x.x, y.x, z.x, 0.0f });
+    M.set_col(1, float4{ x.y, y.y, z.y, 0.0f });
+    M.set_col(2, float4{ x.z, y.z, z.z, 0.0f });
+    M.set_col(3, float4{ -x.x * eye.x - x.y * eye.y - x.z*eye.z,
+                         -y.x * eye.x - y.y * eye.y - y.z*eye.z,
+                         -z.x * eye.x - z.y * eye.y - z.z*eye.z,
+                         1.0f });
+    return M;
   }
 
-  static inline float4x4 projectionMatrix(float fovy, float aspect, float zNear, float zFar)
+  static inline float4x4 perspectiveMatrix(float fovy, float aspect, float zNear, float zFar)
   {
-    float4x4 res;
     const float ymax = zNear * tanf(fovy * 3.14159265358979323846f / 360.0f);
     const float xmax = ymax * aspect;
 
@@ -532,27 +534,12 @@ namespace cmath
     const float temp3 = top - bottom;
     const float temp4 = zFar - zNear;
 
-    res(0, 0) = temp / temp2;
-    res(0, 1) = 0.0;
-    res(0, 2) = 0.0;
-    res(0, 3) = 0.0;
-
-    res(1, 0) = 0.0;
-    res(1, 1) = temp / temp3;
-    res(1, 2) = 0.0;
-    res(1, 3) = 0.0;
-
-    res(2, 0) = (right + left) / temp2;
-    res(2, 1) = (top + bottom) / temp3;
-    res(2, 2) = (-zFar - zNear) / temp4;
-    res(2, 3) = -1.0;
-
-    res(3, 0) = 0.0;
-    res(3, 1) = 0.0;
-    res(3, 2) = (-temp * zFar) / temp4;
-    res(3, 3) = 0.0;
-
-    return transpose(res);
+    float4x4 res;
+    res.set_col(0, float4{ temp / temp2, 0.0f, 0.0f, 0.0f });
+    res.set_col(1, float4{ 0.0f, temp / temp3, 0.0f, 0.0f });
+    res.set_col(2, float4{ (right + left) / temp2,  (top + bottom) / temp3, (-zFar - zNear) / temp4, -1.0 });
+    res.set_col(3, float4{ 0.0f, 0.0f, (-temp * zFar) / temp4, 0.0f });
+    return res;
   }
 
   static inline float4x4 ortoMatrix(const float l, const float r, const float b, const float t, const float n, const float f)
@@ -588,7 +575,7 @@ namespace cmath
     res(1,1) = -1.0f;
     res(2,2) = 0.5f;
     res(2,3) = 0.5f;
-    return transpose(res);
+    return res;
   }
 
 };

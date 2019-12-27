@@ -960,7 +960,7 @@ private:
 
       float4x4 mProj;
       if(m_light.usePerspectiveM)
-        mProj = cmath::projectionMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
+        mProj = cmath::perspectiveMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
       else
         mProj = cmath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
         
@@ -996,7 +996,7 @@ private:
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
       auto mProjFix       = cmath::OpenglToVulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
-      auto mProj          = cmath::projectionMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
+      auto mProj          = cmath::perspectiveMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
       auto mLookAt        = cmath::lookAt(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
       auto mWorldViewProj = mProjFix*mProj*mLookAt;
 
