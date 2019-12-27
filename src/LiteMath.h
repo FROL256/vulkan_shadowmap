@@ -513,7 +513,7 @@ namespace cmath
     M(0, 1) = y.x; M(1, 1) = y.y; M(2, 1) = y.z; M(3, 1) = -y.x * eye.x - y.y * eye.y - y.z*eye.z;
     M(0, 2) = z.x; M(1, 2) = z.y; M(2, 2) = z.z; M(3, 2) = -z.x * eye.x - z.y * eye.y - z.z*eye.z;
     M(0, 3) = 0.0; M(1, 3) = 0.0; M(2, 3) = 0.0; M(3, 3) = 1.0;
-    return M;
+    return transpose(M);
   }
 
   static inline float4x4 projectionMatrix(float fovy, float aspect, float zNear, float zFar)
@@ -552,7 +552,7 @@ namespace cmath
     res(3, 2) = (-temp * zFar) / temp4;
     res(3, 3) = 0.0;
 
-    return res;
+    return transpose(res);
   }
 
   static inline float4x4 ortoMatrix(const float l, const float r, const float b, const float t, const float n, const float f)
@@ -588,7 +588,7 @@ namespace cmath
     res(1,1) = -1.0f;
     res(2,2) = 0.5f;
     res(2,3) = 0.5f;
-    return res;
+    return transpose(res);
   }
 
 };

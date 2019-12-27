@@ -36,8 +36,8 @@ struct Camera
       float4x4 rot;
 
       rot(0, 0) = rot(2, 2) = cosf(-TORADIANS*rightAngle);
-      rot(0, 2) = -sinf(-TORADIANS*rightAngle);
-      rot(2, 0) = sinf(-TORADIANS*rightAngle);
+      rot(2, 0) = -sinf(-TORADIANS*rightAngle);
+      rot(0, 2) = +sinf(-TORADIANS*rightAngle);
 
       float3 direction2 = normalize(rot*forward());
       up     = normalize(rot*up);
