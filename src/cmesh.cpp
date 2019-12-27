@@ -4,8 +4,6 @@
 #include <cmath>
 #include <fstream>
 
-//#include "LiteMath.h"
-//using namespace LiteMath;
 
 std::vector<int> CreateQuadTriIndices(const int a_sizeX, const int a_sizeY)
 {

@@ -260,9 +260,9 @@ private:
   {
     ShadowMapCam() 
     {  
-      cam.pos    = LiteMath::float3(10.0f, 10.0f, 10.0f);
-      cam.lookAt = LiteMath::float3(0, 0, 0);
-      cam.up     = LiteMath::float3(0, 1, 0);
+      cam.pos    = float3(10.0f, 10.0f, 10.0f);
+      cam.lookAt = float3(0, 0, 0);
+      cam.up     = float3(0, 1, 0);
   
       radius          = 5.0f;
       lightTargetDist = 20.0f;
@@ -857,30 +857,28 @@ private:
   \param a_lightMatrix     - input  light matrix (transform world space to tangent space); ignored if a_drawToShadowMap == false;
   \param a_drawToShadowMap - input flag that signals we drawing geometry only in the shadow map
   */
-  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, LiteMath::float4x4 a_mWorldViewProj, LiteMath::float4x4 a_lightMatrix, bool a_drawToShadowMap)
+  void DrawSceneCmd(VkCommandBuffer a_cmdBuff, float4x4 a_mWorldViewProj, float4x4 a_lightMatrix, bool a_drawToShadowMap)
   {
-    LiteMath::float3 a_lightDir = LiteMath::normalize(m_light.cam.pos - m_light.cam.lookAt);
-    auto             a_layout   = pipelineLayout;
+    float3 a_lightDir = normalize(m_light.cam.pos - m_light.cam.lookAt);
+    auto   a_layout   = pipelineLayout;
 
     // draw plane/terrain
     //
-    LiteMath::float4x4 matrices[4];
+    float4x4 matrices[4];
 
     {
-      matrices[3].row[0]   = LiteMath::to_float4(m_cam.pos, 0.0f);                     // put wCamPos
-      matrices[3].row[1]   = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist); // put lightDir
-      matrices[3].row[2].x = TEX_ROT_WIDTH;
-      matrices[3].row[2].y = TEX_ROT_HEIGHT;
-      matrices[3].row[2].z = 1.5f / m_pShadowMap->Width();                             // put (pcfFilterSize*shadowMapSizeInv)
+      matrices[3].set_col(0, to_float4(m_cam.pos, 0.0f));                     // put wCamPos
+      matrices[3].set_col(1, to_float4(a_lightDir, m_light.lightTargetDist)); // put lightDir
+      matrices[3].set_col(2, float4(TEX_ROT_WIDTH, TEX_ROT_HEIGHT, 1.5f / m_pShadowMap->Width(), 0.0f));
     }
 
     {
-      auto mrot   = LiteMath::rotate_X_4x4(-LiteMath::DEG_TO_RAD*90.0f);
-      auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
-      auto mWVPL  = LiteMath::mul(a_lightMatrix, mrot);
-      matrices[0] = LiteMath::transpose(mWVP);
-      matrices[1] = LiteMath::transpose(mWVPL);
-      matrices[2] = LiteMath::transpose(mrot);
+      auto mrot   = cmath::rotate4x4X(-cmath::DEG_TO_RAD*90.0f);
+      auto mWVP   = a_mWorldViewProj*mrot;
+      auto mWVPL  = a_lightMatrix*mrot;
+      matrices[0] = mWVP;
+      matrices[1] = mWVPL;
+      matrices[2] = mrot;
     }
 
     if (!a_drawToShadowMap) // in this particular sample we don't want to draw ground in the shadow map
@@ -892,12 +890,12 @@ private:
 
     // draw teapot
     {
-      auto mtranslate = LiteMath::translate4x4({ -0.5f, 0.4f, -0.5f });
-      auto mWVP       = LiteMath::mul(a_mWorldViewProj, mtranslate);
-      auto mWVPL      = LiteMath::mul(a_lightMatrix, mtranslate);
-      matrices[0]     = LiteMath::transpose(mWVP);
-      matrices[1]     = LiteMath::transpose(mWVPL);
-      matrices[2]     = LiteMath::float4x4();
+      auto mtranslate = cmath::translate4x4({ -0.5f, 0.4f, -0.5f });
+      auto mWVP       = a_mWorldViewProj*mtranslate;
+      auto mWVPL      = a_lightMatrix*mtranslate;
+      matrices[0]     = mWVP;
+      matrices[1]     = mWVPL;
+      matrices[2]     = cmath::float4x4();
     }
    
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + STONE_TEX, 0, NULL);
@@ -906,13 +904,13 @@ private:
 
     // draw bunny
     {
-      auto mtranslate = LiteMath::translate4x4({ +1.25f, 0.6f, 0.5f });
-      auto mscale     = LiteMath::scale4x4({ 75.0, 75.0, 75.0 });
-      auto mWVP       = LiteMath::mul(a_mWorldViewProj, LiteMath::mul(mtranslate, mscale));
-      auto mWVPL      = LiteMath::mul(a_lightMatrix,    LiteMath::mul(mtranslate, mscale));
-      matrices[0]     = LiteMath::transpose(mWVP);
-      matrices[1]     = LiteMath::transpose(mWVPL);
-      matrices[2]     = LiteMath::float4x4();
+      auto mtranslate = cmath::translate4x4({ +1.25f, 0.6f, 0.5f });
+      auto mscale     = cmath::scale4x4({ 75.0, 75.0, 75.0 });
+      auto mWVP       = a_mWorldViewProj*mtranslate*mscale;
+      auto mWVPL      = a_lightMatrix*mtranslate*mscale;
+      matrices[0]     = mWVP;
+      matrices[1]     = mWVPL;
+      matrices[2]     = cmath::float4x4();
     }
 
     vkCmdBindDescriptorSets(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_layout, 0, 1, descriptorSetWithSM + METAL_TEX, 0, NULL);
@@ -954,23 +952,23 @@ private:
     //// draw scene to shadow map (don't draw plane/terrain in the shadowmap)
     //
     assert(m_pShadowMap != nullptr);
-    LiteMath::float4x4 lightMatrix;
+    float4x4 lightMatrix;
     {
       m_pShadowMap->BeginRenderingToThisTexture(a_cmdBuff);
 
       vkCmdBindPipeline(a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, this->graphicsPipelineShadow);
 
-      LiteMath::float4x4 mProj;
+      float4x4 mProj;
       if(m_light.usePerspectiveM)
-        mProj = LiteMath::projectionMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
+        mProj = cmath::projectionMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
       else
-        mProj = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
+        mProj = cmath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
         
-      auto mProjFix       = m_light.usePerspectiveM ? LiteMath::float4x4() : LiteMath::OpenglToVulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
-      auto mLookAt        = LiteMath::lookAt(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up);
-      auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
+      auto mProjFix       = m_light.usePerspectiveM ? cmath::float4x4() : cmath::OpenglToVulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
+      auto mLookAt        = cmath::lookAt(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up);
+      auto mWorldViewProj = mProjFix*mProj*mLookAt;
 
-      DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float4x4(), true);
+      DrawSceneCmd(a_cmdBuff, mWorldViewProj, cmath::float4x4(), true);
 
       m_pShadowMap->EndRenderingToThisTexture(a_cmdBuff);
 
@@ -997,10 +995,10 @@ private:
       vkCmdBindPipeline   (a_cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, a_graphicsPipeline);
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
-      auto mProjFix       = LiteMath::OpenglToVulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
-      auto mProj          = LiteMath::projectionMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
-      auto mLookAt        = LiteMath::lookAt(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
-      auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
+      auto mProjFix       = cmath::OpenglToVulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
+      auto mProj          = cmath::projectionMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
+      auto mLookAt        = cmath::lookAt(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
+      auto mWorldViewProj = mProjFix*mProj*mLookAt;
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightMatrix, false);
 
