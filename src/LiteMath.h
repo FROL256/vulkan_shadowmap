@@ -1,10 +1,6 @@
 #ifndef VFLOAT4_ALL_H
 #define VFLOAT4_ALL_H
 
-// This is just and example. 
-// In practise you may take any of these files that you prefer for your platform.  
-// Or customise this file as you like.
-
 #ifdef WIN32
   #include "vfloat4_x64.h"
 #else
@@ -15,16 +11,25 @@
   #endif  
 #endif 
 
+// This is just and example. 
+// In practise you may take any of these files that you prefer for your platform.  
+// Or may use one of them or make yourself impl
+
+//#include "vfloat4_gcc.h"
+//#include "vfloat4_x64.h"
+
 // __mips__
 // __ppc__ 
 
-namespace cmath
+#include <cmath>
+
+namespace LiteMath
 { 
   const float EPSILON    = 1e-6f;
   const float DEG_TO_RAD = float(3.14159265358979323846f) / 180.0f;
   
-  typedef cvex::vint4     int4;  // #TODO: create convenient interface if needed
-  typedef cvex::vuint4    uint4; // #TODO: create convenient interface if needed
+  typedef cvex::vint4     int4;  // #TODO: create convinient interface if needed
+  typedef cvex::vuint4    uint4; // #TODO: create convinient interface if needed
 
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -36,60 +41,103 @@ namespace cmath
     inline float4(float a, float b, float c, float d) : x(a), y(b), z(c), w(d) {}
     inline explicit float4(float a[4]) : x(a[0]), y(a[1]), z(a[2]), w(a[3]) {}
 
+    inline float4(const std::initializer_list<float> a_v) { v = cvex::load_u(a_v.begin()); }
     inline float4(cvex::vfloat4 rhs) { v = rhs; }
     inline float4 operator=(cvex::vfloat4 rhs) { v = rhs; return *this; }
-    inline operator cvex::vfloat4() const { return v; }
     
-    inline float& operator[](int i)       { return v[i]; }
-    inline float  operator[](int i) const { return v[i]; }
+    inline float& operator[](int i)       { return M[i]; }
+    inline float  operator[](int i) const { return M[i]; }
 
-    inline float4 operator+(const float4& b) { return v + b.v; }
-    inline float4 operator-(const float4& b) { return v - b.v; }
-    inline float4 operator*(const float4& b) { return v * b.v; }
-    inline float4 operator/(const float4& b) { return v / b.v; }
+    inline float4 operator+(const float4& b) const { return v + b.v; }
+    inline float4 operator-(const float4& b) const { return v - b.v; }
+    inline float4 operator*(const float4& b) const { return v * b.v; }
+    inline float4 operator/(const float4& b) const { return v / b.v; }
 
-    inline float4 operator+(const float rhs) { return v + rhs; }
-    inline float4 operator-(const float rhs) { return v - rhs; }
-    inline float4 operator*(const float rhs) { return v * rhs; }
-    inline float4 operator/(const float rhs) { return v / rhs; }
+    inline float4 operator+(const float rhs) const { return v + rhs; }
+    inline float4 operator-(const float rhs) const { return v - rhs; }
+    inline float4 operator*(const float rhs) const { return v * rhs; }
+    inline float4 operator/(const float rhs) const { return v / rhs; }
 
-    inline cvex::vint4 operator> (const float4& b) { return (v > b.v); }
-    inline cvex::vint4 operator< (const float4& b) { return (v < b.v); }
-    inline cvex::vint4 operator>=(const float4& b) { return (v >= b.v); }
-    inline cvex::vint4 operator<=(const float4& b) { return (v <= b.v); }
-    inline cvex::vint4 operator==(const float4& b) { return (v == b.v); }
-    inline cvex::vint4 operator!=(const float4& b) { return (v != b.v); }
+    inline cvex::vint4 operator> (const float4& b) const { return (v > b.v); }
+    inline cvex::vint4 operator< (const float4& b) const { return (v < b.v); }
+    inline cvex::vint4 operator>=(const float4& b) const { return (v >= b.v); }
+    inline cvex::vint4 operator<=(const float4& b) const { return (v <= b.v); }
+    inline cvex::vint4 operator==(const float4& b) const { return (v == b.v); }
+    inline cvex::vint4 operator!=(const float4& b) const { return (v != b.v); }
 
     union
     {
       struct {float x, y, z, w; };
+      float  M[4];
       cvex::vfloat4 v;
     };
   };
 
+  static inline float4 operator+(const float a, const float4& b) { return float4(a + b.v); }
+  static inline float4 operator-(const float a, const float4& b) { return float4(a - b.v); }
+  static inline float4 operator*(const float a, const float4& b) { return float4(a * b.v); }
+  static inline float4 operator/(const float a, const float4& b) { return float4(a / b.v); }
+
+  static inline float4 load   (const float* p)         { return cvex::load(p); }
+  static inline float4 load_u (const float* p)         { return cvex::load_u(p); }
+  static inline void   store  (float* p, float4 a_val) { cvex::store  (p, a_val.v); }
+  static inline void   store_u(float* p, float4 a_val) { cvex::store_u(p, a_val.v); }
+
+  static inline int4   to_int32  (const float4& a) { return cvex::to_int32(a.v); }
+  static inline uint4  to_uint32 (const float4& a) { return cvex::to_uint32(a.v); }
+  static inline float4 to_float32(const  int4& a)  { return cvex::to_float32(a); }
+  static inline float4 to_float32(const uint4& a)  { return cvex::to_float32(a); }
+
+  static inline float4 as_float32(const int4 a_val)   { return cvex::as_float32(a_val); }
+  static inline float4 as_float32(const uint4 a_val)  { return cvex::as_float32(a_val); }
+  static inline int4   as_int32  (const float4 a_val) { return cvex::as_int32  (a_val.v); }
+  static inline uint4  as_uint32 (const float4 a_val) { return cvex::as_uint32 (a_val.v); }
+
+  static inline float4 min  (const float4& a, const float4& b)                            { return cvex::min(a.v, b.v); }
+  static inline float4 max  (const float4& a, const float4& b)                            { return cvex::max(a.v, b.v); }
+  static inline float4 clamp(const float4& x, const float4& minVal, const float4& maxVal) { return cvex::clamp(x.v, minVal.v, maxVal.v); }
+  static inline float4 lerp (const float4& u, const float4& v, const float t)             { return cvex::lerp(u.v, v.v, t); }
+  
+  static inline float4 rcp_e(const float4& a) { return cvex::rcp_e(a.v); }
+  static inline float  dot3f(const float4& a, const float4& b) { return cvex::dot3f(a.v, b.v); }
+  static inline float4 dot3v(const float4& a, const float4& b) { return cvex::dot3v(a.v, b.v); }
+  static inline float  dot4f(const float4& a, const float4& b) { return cvex::dot4f(a.v, b.v); }
+  static inline float4 dot4v(const float4& a, const float4& b) { return cvex::dot4v(a.v, b.v); }
+  static inline float4 cross3(const float4& a, const float4& b){ return cvex::cross3(a.v, b.v);} 
+
+  static inline float  length3f(const float4& a) { return cvex::length3f(a.v); }
+  static inline float  length4f(const float4& a) { return cvex::length4f(a.v); }
+  static inline float4 length3v(const float4& a) { return cvex::length3v(a.v); }
+  static inline float4 length4v(const float4& a) { return cvex::length4v(a.v); }
+
+  static inline float4 floor(const float4 a_val) { return cvex::floor(a_val.v); }
+  static inline float4 ceil (const float4 a_val) { return cvex::ceil(a_val.v);  }
+
+  static inline bool cmpgt3(const float4& a, const float4& b) { return cvex::cmpgt3(a.v, b.v); }
+  static inline bool cmplt3(const float4& a, const float4& b) { return cvex::cmplt3(a.v, b.v); }
+  static inline bool cmpge3(const float4& a, const float4& b) { return cvex::cmpge3(a.v, b.v); }
+  static inline bool cmple3(const float4& a, const float4& b) { return cvex::cmple3(a.v, b.v); }
+
+  static inline unsigned int color_pack_rgba(const float4 rel_col) { return cvex::color_pack_rgba(rel_col.v); }
+  static inline unsigned int color_pack_bgra(const float4 rel_col) { return cvex::color_pack_bgra(rel_col.v); }
+
+  static inline float extract_0(const float4& a_val) { return cvex::extract_0(a_val.v); }
+  static inline float extract_1(const float4& a_val) { return cvex::extract_1(a_val.v); }
+  static inline float extract_2(const float4& a_val) { return cvex::extract_2(a_val.v); }
+  static inline float extract_3(const float4& a_val) { return cvex::extract_3(a_val.v); }
+
+  static inline float4 splat_0(const float4& v)      { return cvex::splat_0(v.v); }
+  static inline float4 splat_1(const float4& v)      { return cvex::splat_1(v.v); }
+  static inline float4 splat_2(const float4& v)      { return cvex::splat_2(v.v); }
+  static inline float4 splat_3(const float4& v)      { return cvex::splat_3(v.v); }  
+
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  struct float2
-  {
-    inline float2() :x(0), y(0) {}
-    inline float2(float a, float b) : x(a), y(b) {}
-    inline explicit float2(float a[2]) : x(a[0]), y(a[1]) {}
-
-    inline float& operator[](int i)       { return M[i]; }
-    inline float  operator[](int i) const { return M[i]; }
-
-    union
-    {
-      struct {float x, y; };
-      float M[2];
-    };
-  };
 
   struct float3
   {
-    inline float3() :x(0), y(0), z(0) {}
+    inline float3() : x(0), y(0), z(0) {}
     inline float3(float a, float b, float c) : x(a), y(b), z(c) {}
     inline explicit float3(const float* ptr) : x(ptr[0]), y(ptr[1]), z(ptr[2]) {}
 
@@ -100,6 +148,22 @@ namespace cmath
     {
       struct {float x, y, z; };
       float M[3];
+    };
+  };
+
+  struct float2
+  {
+    inline float2() : x(0), y(0) {}
+    inline float2(float a, float b) : x(a), y(b) {}
+    inline explicit float2(float a[2]) : x(a[0]), y(a[1]) {}
+
+    inline float& operator[](int i)       { return M[i]; }
+    inline float  operator[](int i) const { return M[i]; }
+
+    union
+    {
+      struct {float x, y; };
+      float M[2];
     };
   };
 
@@ -120,10 +184,10 @@ namespace cmath
       m_col[3] = float4{ 0.0f, 0.0f, 0.0f, 1.0f };
     }
 
-    inline float4x4(const float A[16])
+    inline explicit float4x4(const float A[16])
     {
-      m_col[0] = float4{ A[0], A[4], A[8], A[12] };
-      m_col[1] = float4{ A[1], A[5], A[9], A[13] };
+      m_col[0] = float4{ A[0], A[4], A[8],  A[12] };
+      m_col[1] = float4{ A[1], A[5], A[9],  A[13] };
       m_col[2] = float4{ A[2], A[6], A[10], A[14] };
       m_col[3] = float4{ A[3], A[7], A[11], A[15] };
     }
@@ -137,11 +201,11 @@ namespace cmath
       return res;
     }
 
-    inline float4 get_col(int i) const         { return m_col[i]; }
-    inline void   set_col(int i, float4 a_col) { m_col[i] = a_col; }
+    inline float4 get_col(int i) const                { return m_col[i]; }
+    inline void   set_col(int i, const float4& a_col) { m_col[i] = a_col; }
 
     inline float4 get_row(int i) const { return float4{ m_col[0][i], m_col[1][i], m_col[2][i], m_col[3][i] }; }
-    inline void   set_row(int i, float4 a_col)
+    inline void   set_row(int i, const float4& a_col)
     {
       m_col[0][i] = a_col[0];
       m_col[1][i] = a_col[1];

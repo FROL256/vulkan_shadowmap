@@ -77,6 +77,7 @@ namespace cvex
   static inline vfloat4 min  (const vfloat4 a, const vfloat4 b) { return a < b ? a : b; }
   static inline vfloat4 max  (const vfloat4 a, const vfloat4 b) { return a > b ? a : b; }
   static inline vfloat4 clamp(const vfloat4 x, const vfloat4 minVal, const vfloat4 maxVal) { return max(min(x, maxVal), minVal); }
+  static inline vfloat4 lerp (const vfloat4 u, const vfloat4 v, const float t) { return u + t * (v - u); }
 
   static inline vint4 min  (const vint4 a, const vint4 b) { return a < b ? a : b; }
   static inline vint4 max  (const vint4 a, const vint4 b) { return a > b ? a : b; }
