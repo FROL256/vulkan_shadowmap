@@ -2,11 +2,11 @@
 //
 #pragma once
 
-#include "litemath.h"
+#include "LiteMath.h"
 
-using cmath::float3;
-using cmath::float4;
-using cmath::float4x4;
+using LiteMath::float3;
+using LiteMath::float4;
+using LiteMath::float4x4;
 
 struct Camera
 {
