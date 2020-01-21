@@ -591,21 +591,27 @@ private:
     assert(m_pShadowMap   != nullptr);
     assert(m_pTerrainMesh != nullptr);
 
-    vk_utils::GraphicsPipelineCreateInfo grmaker;
-    
-    pipelineLayout = grmaker.Layout_Simple3D_VSFS(device, WIDTH, HEIGHT, descriptorSetLayoutSM, 4 * 16 * sizeof(float));
+    vk_utils::GraphicsPipelineBuilder             builder;
+    vk_utils::GraphicsPipelineBuilder::ShaderList paths;
 
-    grmaker.Shaders_VSFS(device, "shaders/cmesh_t3v4x2.spv", "shaders/direct_light.spv");
-    graphicsPipeline = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
+    builder.DefaultState_Simple3D(WIDTH, HEIGHT);
 
-    grmaker.Shaders_VS(device, "shaders/cmesh_t3v4x2.spv");
-    grmaker.viewport.width  = +(float)m_pShadowMap->Width();
-    grmaker.viewport.height = +(float)m_pShadowMap->Height();
-    grmaker.scissor.extent  = VkExtent2D{ uint32_t(m_pShadowMap->Width()), uint32_t(m_pShadowMap->Height()) };
+    paths.clear();
+    paths[VK_SHADER_STAGE_VERTEX_BIT]   = "shaders/cmesh_t3v4x2.spv";
+    paths[VK_SHADER_STAGE_FRAGMENT_BIT] = "shaders/direct_light.spv";
+    builder.Shaders(device, paths);
 
-    graphicsPipelineShadow  = grmaker.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), m_pShadowMap->Renderpass());
-  
+    pipelineLayout   = builder.Layout  (device, descriptorSetLayoutSM, 4 * 16 * sizeof(float));
+    graphicsPipeline = builder.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), renderPass);
 
+    paths.clear();
+    paths[VK_SHADER_STAGE_VERTEX_BIT]   = "shaders/cmesh_t3v4x2.spv";
+    builder.Shaders(device, paths);
+
+    builder.viewport.width  = +(float)m_pShadowMap->Width();
+    builder.viewport.height = +(float)m_pShadowMap->Height();
+    builder.scissor.extent  = VkExtent2D{ uint32_t(m_pShadowMap->Width()), uint32_t(m_pShadowMap->Height()) };
+    graphicsPipelineShadow  = builder.Pipeline(device, m_pTerrainMesh->VertexInputLayout(), m_pShadowMap->Renderpass());
   }
 
 

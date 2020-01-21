@@ -1,17 +1,25 @@
 #pragma once
+
+#include <map>
+#include <unordered_map>
 #include "vk_utils.h"
 
 namespace vk_utils
 {
+  VkPipelineInputAssemblyStateCreateInfo IA_TList();
+  VkPipelineInputAssemblyStateCreateInfo IA_PList();
+  VkPipelineInputAssemblyStateCreateInfo IA_LList();
+  VkPipelineInputAssemblyStateCreateInfo IA_LSList();
 
-  VkPipelineInputAssemblyStateCreateInfo DefaultInputAssemblyTList();
-
-  struct GraphicsPipelineCreateInfo
+  struct GraphicsPipelineBuilder
   {
-    static constexpr int SHADERS_STAGE = 5;
+    enum {MAXSHADERS = 10};
 
-    VkShaderModule                         shaderModules  [SHADERS_STAGE];
-    VkPipelineShaderStageCreateInfo        shaderStageInfo[SHADERS_STAGE];
+    typedef typename std::unordered_map<VkShaderStageFlagBits, std::string> ShaderList;
+
+    VkShaderModule                  shaderModules[MAXSHADERS];
+    VkPipelineShaderStageCreateInfo shaderStageInfos[MAXSHADERS];
+
     VkPipelineInputAssemblyStateCreateInfo inputAssembly;                  // set from input!
     VkViewport                             viewport;
     VkRect2D                               scissor;
@@ -29,15 +37,16 @@ namespace vk_utils
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    GraphicsPipelineCreateInfo();
+    GraphicsPipelineBuilder();
 
-    void             Shaders_VS  (VkDevice a_device, const char* vs_path);
-    void             Shaders_VSFS(VkDevice a_device, const char* vs_path, const char* ps_path);
+    void Shaders(VkDevice a_device, const std::unordered_map<VkShaderStageFlagBits, std::string> &shader_paths);
 
-    VkPipelineLayout Layout_Simple3D_VSFS(VkDevice a_device, uint32_t a_width, uint32_t a_height, VkDescriptorSetLayout a_dslayout, uint32_t a_pcRangeSize, 
-                                          VkPipelineInputAssemblyStateCreateInfo a_inputAssembly = DefaultInputAssemblyTList());
+    VkPipelineLayout Layout(VkDevice a_device, VkDescriptorSetLayout a_dslayout, uint32_t a_pcRangeSize);
 
-    VkPipeline       Pipeline(VkDevice a_device, VkPipelineVertexInputStateCreateInfo a_vertexLayout, VkRenderPass a_renderPass);
+    void             DefaultState_Simple3D(uint32_t a_width, uint32_t a_height);
+
+    VkPipeline       Pipeline(VkDevice a_device, VkPipelineVertexInputStateCreateInfo a_vertexLayout, VkRenderPass a_renderPass,
+                                  VkPipelineInputAssemblyStateCreateInfo a_inputAssembly = IA_TList());
 
   protected:
 

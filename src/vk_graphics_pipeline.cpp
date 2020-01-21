@@ -2,47 +2,38 @@
 
 #include <cstring>
 
-vk_utils::GraphicsPipelineCreateInfo::GraphicsPipelineCreateInfo() 
+vk_utils::GraphicsPipelineBuilder::GraphicsPipelineBuilder()
 { 
-  memset(this, 0, sizeof(GraphicsPipelineCreateInfo)); ///<! ASSUME THIS IS PLAIN OLD DATA!!!!
-} 
-
-void vk_utils::GraphicsPipelineCreateInfo::Shaders_VSFS(VkDevice a_device, const char* vs_path, const char* ps_path)
-{
-  auto vertShaderCode = vk_utils::ReadFile(vs_path);
-  auto fragShaderCode = vk_utils::ReadFile(ps_path);
-
-  shaderModules[0] = vk_utils::CreateShaderModule(a_device, vertShaderCode);
-  shaderModules[1] = vk_utils::CreateShaderModule(a_device, fragShaderCode);
-
-  shaderStageInfo[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shaderStageInfo[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
-  shaderStageInfo[0].module = shaderModules[0];
-  shaderStageInfo[0].pName  = "main";
-
-  shaderStageInfo[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shaderStageInfo[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-  shaderStageInfo[1].module = shaderModules[1];
-  shaderStageInfo[1].pName  = "main";
-
-  m_stagesNum = 2;
+  memset(this, 0, sizeof(GraphicsPipelineBuilder)); ///<! ASSUME THIS IS PLAIN OLD DATA!!!!
 }
 
-void vk_utils::GraphicsPipelineCreateInfo::Shaders_VS(VkDevice a_device, const char* vs_path)
+void vk_utils::GraphicsPipelineBuilder::Shaders(VkDevice a_device, const std::unordered_map<VkShaderStageFlagBits, std::string> &shader_paths)
 {
-  auto vertShaderCode = vk_utils::ReadFile(vs_path);
+  int top = 0;
+  for(auto& shader : shader_paths)
+  {
+    auto stage = shader.first;
+    auto path  = shader.second;
 
-  shaderModules[0] = vk_utils::CreateShaderModule(a_device, vertShaderCode);
+    auto shaderCode             = vk_utils::ReadFile(path.c_str());
+    VkShaderModule shaderModule = vk_utils::CreateShaderModule(a_device, shaderCode);
+    shaderModules[top] = shaderModule;
 
-  shaderStageInfo[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shaderStageInfo[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  shaderStageInfo[0].module = shaderModules[0];
-  shaderStageInfo[0].pName = "main";
+    VkPipelineShaderStageCreateInfo stage_info = {};
+    stage_info.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stage_info.stage  = stage;
+    stage_info.module = shaderModule;
+    stage_info.pName  = "main";
 
-  m_stagesNum = 1;
+    shaderStageInfos[top] = stage_info;
+    top++;
+  }
+
+  m_stagesNum = top;
 }
 
-VkPipelineInputAssemblyStateCreateInfo vk_utils::DefaultInputAssemblyTList()
+
+VkPipelineInputAssemblyStateCreateInfo vk_utils::IA_TList()
 {
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
   inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -51,10 +42,68 @@ VkPipelineInputAssemblyStateCreateInfo vk_utils::DefaultInputAssemblyTList()
   return inputAssembly;
 }
 
-VkPipelineLayout vk_utils::GraphicsPipelineCreateInfo::Layout_Simple3D_VSFS(VkDevice a_device, uint32_t a_width, uint32_t a_height, VkDescriptorSetLayout a_dslayout, 
-                                                                            uint32_t a_pcRangeSize, VkPipelineInputAssemblyStateCreateInfo a_inputAssembly)
+VkPipelineInputAssemblyStateCreateInfo vk_utils::IA_PList()
+{
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+  inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssembly.topology               = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+  inputAssembly.primitiveRestartEnable = VK_FALSE;
+  return inputAssembly;
+}
+
+VkPipelineInputAssemblyStateCreateInfo vk_utils::IA_LList()
+{
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+  inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssembly.topology               = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+  inputAssembly.primitiveRestartEnable = VK_FALSE;
+  return inputAssembly;
+}
+
+VkPipelineInputAssemblyStateCreateInfo vk_utils::IA_LSList()
+{
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+  inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssembly.topology               = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+  inputAssembly.primitiveRestartEnable = VK_FALSE;
+  return inputAssembly;
+}
+
+
+VkPipelineLayout vk_utils::GraphicsPipelineBuilder::Layout(VkDevice a_device, VkDescriptorSetLayout a_dslayout, uint32_t a_pcRangeSize)
 {
   auto m_device = a_device;
+
+  pcRange.stageFlags = 0;
+  for(auto &stage : shaderStageInfos)
+    pcRange.stageFlags |= stage.stage;
+  pcRange.offset     = 0;
+  pcRange.size       = a_pcRangeSize; 
+
+  pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayoutInfo.pushConstantRangeCount = 0;
+  pipelineLayoutInfo.pushConstantRangeCount = 1;
+  pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
+
+  if(a_dslayout != VK_NULL_HANDLE)
+  {
+    pipelineLayoutInfo.pSetLayouts            = &a_dslayout; //&descriptorSetLayout;
+    pipelineLayoutInfo.setLayoutCount         = 1;
+  }
+  else
+  {
+    pipelineLayoutInfo.pSetLayouts            = VK_NULL_HANDLE;
+    pipelineLayoutInfo.setLayoutCount         = 0;
+  }
+  
+  if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
+    throw std::runtime_error("[GraphicsPipelineMaker::MakeLayout]: failed to create pipeline layout!");
+
+  return m_pipelineLayout;
+}
+
+void vk_utils::GraphicsPipelineBuilder::DefaultState_Simple3D(uint32_t a_width, uint32_t a_height)
+{
   VkExtent2D a_screenExtent{ uint32_t(a_width), uint32_t(a_height) };
 
   viewport.x        = 0.0f;
@@ -66,10 +115,6 @@ VkPipelineLayout vk_utils::GraphicsPipelineCreateInfo::Layout_Simple3D_VSFS(VkDe
 
   scissor.offset   = { 0, 0 };
   scissor.extent   = a_screenExtent;
-
-  //
-  //
-  inputAssembly    = a_inputAssembly;
 
   viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   viewportState.viewportCount = 1;
@@ -103,20 +148,6 @@ VkPipelineLayout vk_utils::GraphicsPipelineCreateInfo::Layout_Simple3D_VSFS(VkDe
   colorBlending.blendConstants[2] = 0.0f;
   colorBlending.blendConstants[3] = 0.0f;
 
-  pcRange.stageFlags = (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-  pcRange.offset     = 0;
-  pcRange.size       = a_pcRangeSize; 
-
-  pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.pushConstantRangeCount = 0;
-  pipelineLayoutInfo.pushConstantRangeCount = 1;
-  pipelineLayoutInfo.pPushConstantRanges    = &pcRange;
-  pipelineLayoutInfo.pSetLayouts            = &a_dslayout; //&descriptorSetLayout;
-  pipelineLayoutInfo.setLayoutCount         = 1;
-
-  if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
-    throw std::runtime_error("[GraphicsPipelineCreateInfo::Layout_Simple3D_VSFS]: failed to create pipeline layout!");
-
   depthStencilTest.sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
   depthStencilTest.depthTestEnable       = true;
   depthStencilTest.depthWriteEnable      = true;
@@ -126,22 +157,20 @@ VkPipelineLayout vk_utils::GraphicsPipelineCreateInfo::Layout_Simple3D_VSFS(VkDe
   depthStencilTest.depthBoundsTestEnable = VK_FALSE;
   depthStencilTest.minDepthBounds        = 0.0f; // Optional
   depthStencilTest.maxDepthBounds        = 1.0f; // Optional
-
-  return m_pipelineLayout;
 }
 
-
-VkPipeline vk_utils::GraphicsPipelineCreateInfo::Pipeline(VkDevice a_device, VkPipelineVertexInputStateCreateInfo a_vertexLayout, VkRenderPass a_renderPass)
+VkPipeline vk_utils::GraphicsPipelineBuilder::Pipeline(VkDevice a_device, VkPipelineVertexInputStateCreateInfo a_vertexLayout,
+                                                         VkRenderPass a_renderPass, VkPipelineInputAssemblyStateCreateInfo a_inputAssembly)
 {
-  auto m_device        = a_device;
-  auto vertexInputInfo = a_vertexLayout;
+  auto m_device = a_device;
+  inputAssembly = a_inputAssembly;
 
-  VkGraphicsPipelineCreateInfo pipelineInfo = {};
+  pipelineInfo = {};
   pipelineInfo.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   pipelineInfo.flags               = 0; 
   pipelineInfo.stageCount          = m_stagesNum;
-  pipelineInfo.pStages             = shaderStageInfo;
-  pipelineInfo.pVertexInputState   = &vertexInputInfo;
+  pipelineInfo.pStages             = &shaderStageInfos[0];
+  pipelineInfo.pVertexInputState   = &a_vertexLayout;
   pipelineInfo.pInputAssemblyState = &inputAssembly;
   pipelineInfo.pViewportState      = &viewportState;
   pipelineInfo.pRasterizationState = &rasterizer;
@@ -154,15 +183,15 @@ VkPipeline vk_utils::GraphicsPipelineCreateInfo::Pipeline(VkDevice a_device, VkP
   pipelineInfo.pDepthStencilState  = &depthStencilTest;
 
   if (vkCreateGraphicsPipelines(a_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline) != VK_SUCCESS)
-    throw std::runtime_error("[GraphicsPipelineCreateInfo::Pipeline]: failed to create graphics pipeline!");
+    throw std::runtime_error("[GraphicsPipelineMaker::MakePipeline]: failed to create graphics pipeline!");
 
   // free all shader modules due to we don't need them anymore
   //
-  for (int i = 0; i < SHADERS_STAGE; i++)
+  for (auto& module : shaderModules)
   {
-    if(shaderModules[i] != VK_NULL_HANDLE)
-      vkDestroyShaderModule(a_device, shaderModules[i], VK_NULL_HANDLE);
-    shaderModules[i] = VK_NULL_HANDLE;
+    if(module != VK_NULL_HANDLE)
+      vkDestroyShaderModule(a_device, module, VK_NULL_HANDLE);
+    module = VK_NULL_HANDLE;
   }
 
   return m_pipeline;
