@@ -31,12 +31,12 @@ struct Camera
     {
       LiteMath::float4x4 rot;
       rot.identity();
-      rot.M(0, 0) = rot.M(2, 2) = cosf(-TORADIANS*rightAngle);
-      rot.M(0, 2) = -sinf(-TORADIANS*rightAngle);
-      rot.M(2, 0) = sinf(-TORADIANS*rightAngle);
+      rot(0, 0) = rot(2, 2) = cosf(-TORADIANS*rightAngle);
+      rot(0, 2) = -sinf(-TORADIANS*rightAngle);
+      rot(2, 0) = sinf(-TORADIANS*rightAngle);
 
-      LiteMath::float3 direction2 = LiteMath::normalize(LiteMath::mul(rot, forward()));
-      up     = LiteMath::normalize(LiteMath::mul(rot, up));
+      LiteMath::float3 direction2 = LiteMath::normalize(rot*forward());
+      up     = LiteMath::normalize(rot*up);
       lookAt = pos + tdist*direction2;
     }
   }

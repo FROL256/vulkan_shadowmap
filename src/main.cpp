@@ -146,7 +146,6 @@ void OnMouseScroll(GLFWwindow* window, double xoffset, double yoffset)
   g_input.scrollY = float(yoffset);
 }
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -337,7 +336,7 @@ private:
     
       double mouseX, mouseY;
       glfwGetCursorPos(window, &mouseX, &mouseY);
-      a_cam.offsetOrientation(g_input.mouseSensitivity * float(mouseY), g_input.mouseSensitivity * float(mouseX));
+      a_cam.offsetOrientation(+g_input.mouseSensitivity * float(mouseY), -g_input.mouseSensitivity * float(mouseX));
       glfwSetCursorPos(window, 0, 0); //reset the mouse, so it doesn't go out of the window
       g_input.capturedMouseJustNow = false;
     }
@@ -805,17 +804,17 @@ private:
     LiteMath::float4x4 matrices[4];
 
     {
-      matrices[3].row[0] = LiteMath::to_float4(m_cam.pos, 0.0f);
-      matrices[3].row[1] = LiteMath::to_float4(a_lightDir, m_light.lightTargetDist);
+      matrices[3].set_col(0, LiteMath::to_float4(m_cam.pos, 0.0f));
+      matrices[3].set_col(1, LiteMath::to_float4(a_lightDir, m_light.lightTargetDist));
     }
 
     {
-      auto mrot   = LiteMath::rotate_X_4x4(-LiteMath::DEG_TO_RAD*90.0f);
-      auto mWVP   = LiteMath::mul(a_mWorldViewProj, mrot);
-      auto mWVPL  = LiteMath::mul(a_lightMatrix, mrot);
-      matrices[0] = LiteMath::transpose(mWVP);
-      matrices[1] = LiteMath::transpose(mWVPL);
-      matrices[2] = LiteMath::transpose(mrot);
+      auto mrot   = LiteMath::rotate4x4X(-LiteMath::DEG_TO_RAD*90.0f);
+      auto mWVP   = a_mWorldViewProj*mrot;
+      auto mWVPL  = a_lightMatrix*mrot;
+      matrices[0] = mWVP;
+      matrices[1] = mWVPL;
+      matrices[2] = mrot;
     }
 
     if (!a_drawToShadowMap) // in this particular sample we don't want to draw ground in the shadow map
@@ -828,10 +827,10 @@ private:
     // draw teapot
     {
       auto mtranslate = LiteMath::translate4x4({ -0.5f, 0.4f, -0.5f });
-      auto mWVP       = LiteMath::mul(a_mWorldViewProj, mtranslate);
-      auto mWVPL      = LiteMath::mul(a_lightMatrix, mtranslate);
-      matrices[0]     = LiteMath::transpose(mWVP);
-      matrices[1]     = LiteMath::transpose(mWVPL);
+      auto mWVP       = a_mWorldViewProj*mtranslate;
+      auto mWVPL      = a_lightMatrix*mtranslate;
+      matrices[0]     = mWVP;
+      matrices[1]     = mWVPL;
       matrices[2]     = LiteMath::float4x4();
     }
    
@@ -843,10 +842,10 @@ private:
     {
       auto mtranslate = LiteMath::translate4x4({ +1.25f, 0.6f, 0.5f });
       auto mscale     = LiteMath::scale4x4({ 75.0, 75.0, 75.0 });
-      auto mWVP       = LiteMath::mul(a_mWorldViewProj, LiteMath::mul(mtranslate, mscale));
-      auto mWVPL      = LiteMath::mul(a_lightMatrix,    LiteMath::mul(mtranslate, mscale));
-      matrices[0]     = LiteMath::transpose(mWVP);
-      matrices[1]     = LiteMath::transpose(mWVPL);
+      auto mWVP       = a_mWorldViewProj*mtranslate*mscale;
+      auto mWVPL      = a_lightMatrix*mtranslate*mscale;
+      matrices[0]     = mWVP;
+      matrices[1]     = mWVPL;
       matrices[2]     = LiteMath::float4x4();
     }
 
@@ -889,13 +888,13 @@ private:
 
       LiteMath::float4x4 mProj;
       if(m_light.usePerspectiveM)
-        mProj = LiteMath::projectionMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
+        mProj = LiteMath::perspectiveMatrix(m_light.cam.fov, 1.0f, 1.0f, m_light.lightTargetDist*2.0f);
       else
         mProj = LiteMath::ortoMatrix(-m_light.radius, +m_light.radius, -m_light.radius, +m_light.radius, 0.0f, m_light.lightTargetDist);
         
       auto mProjFix       = m_light.usePerspectiveM ? LiteMath::float4x4() : LiteMath::OpenglToVulkanProjectionMatrixFix(); // don't understang why fix is not needed for perspective case for shadowmap ... it works for common rendering
       auto mLookAt        = LiteMath::lookAt(m_light.cam.pos, m_light.cam.pos + m_light.cam.forward()*10.0f, m_light.cam.up);
-      auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
+      auto mWorldViewProj = mProjFix*mProj*mLookAt;
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, LiteMath::float4x4(), true);
 
@@ -925,9 +924,9 @@ private:
 
       const float aspect  = float(a_frameBufferExtent.width)/float(a_frameBufferExtent.height); 
       auto mProjFix       = LiteMath::OpenglToVulkanProjectionMatrixFix();  // http://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
-      auto mProj          = LiteMath::projectionMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
+      auto mProj          = LiteMath::perspectiveMatrix(m_cam.fov, aspect, 0.1f, 1000.0f);
       auto mLookAt        = LiteMath::lookAt(m_cam.pos, m_cam.pos + m_cam.forward()*10.0f, m_cam.up);
-      auto mWorldViewProj = LiteMath::mul(LiteMath::mul(mProjFix, mProj), mLookAt);
+      auto mWorldViewProj = mProjFix*mProj*mLookAt;
 
       DrawSceneCmd(a_cmdBuff, mWorldViewProj, lightMatrix, false);
 
